@@ -1,0 +1,97 @@
+# ============================================================================
+# Setup required: replace three placeholders before deploying
+#   <YOUR_CLOUDFLARE_ACCOUNT_ID>     — found in Workers & Pages right sidebar
+#   <YOUR_STAGING_D1_DATABASE_ID>    — printed by: wrangler d1 create family-health-dashboard-db-staging
+#   <YOUR_PRODUCTION_D1_DATABASE_ID> — printed by: wrangler d1 create family-health-dashboard-db
+# See docs/SETUP.md for the full walkthrough.
+# ============================================================================
+
+name = "family-health-dashboard-api"
+main = "src/index.ts"
+compatibility_date = "2025-03-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Local dev defaults (used by `wrangler dev` — overridden by env secrets in .dev.vars)
+[vars]
+ENVIRONMENT = "development"
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/<YOUR_CLOUDFLARE_ACCOUNT_ID>/family-health-dashboard"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "family-health-dashboard-db"
+database_id = "local"
+migrations_dir = "src/db/migrations"
+
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "family-health-dashboard-files"
+
+[[workflows]]
+binding = "EXTRACTION_WORKFLOW"
+name = "document-extraction"
+class_name = "DocumentExtractionWorkflow"
+
+[triggers]
+crons = ["0 3 * * *"]
+
+# ---------------------------------------------------------------------------
+# Staging environment — deploy with: wrangler deploy --env staging
+# Resources: family-health-dashboard-db-staging, family-health-dashboard-files-staging
+# Pages:     https://family-health-dashboard-staging.pages.dev
+# Secrets:   wrangler secret put JWT_SECRET --env staging  (etc.)
+# ---------------------------------------------------------------------------
+[env.staging]
+name = "family-health-dashboard-api-staging"
+
+[env.staging.vars]
+ENVIRONMENT = "staging"
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/<YOUR_CLOUDFLARE_ACCOUNT_ID>/family-health-dashboard"
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "family-health-dashboard-db-staging"
+database_id = "<YOUR_STAGING_D1_DATABASE_ID>"        # fill in after: wrangler d1 create family-health-dashboard-db-staging
+migrations_dir = "src/db/migrations"
+
+[[env.staging.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "family-health-dashboard-files-staging"
+
+[[env.staging.workflows]]
+binding = "EXTRACTION_WORKFLOW"
+name = "document-extraction-staging"
+class_name = "DocumentExtractionWorkflow"
+
+[env.staging.triggers]
+crons = ["0 3 * * *"]
+
+# ---------------------------------------------------------------------------
+# Production environment — deploy with: wrangler deploy --env production
+# Resources: family-health-dashboard-db, family-health-dashboard-files
+# Pages:     https://family-health-dashboard.pages.dev
+# Secrets:   wrangler secret put JWT_SECRET --env production  (etc.)
+# ---------------------------------------------------------------------------
+[env.production]
+name = "family-health-dashboard-api"
+
+[env.production.vars]
+ENVIRONMENT = "production"
+AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/<YOUR_CLOUDFLARE_ACCOUNT_ID>/family-health-dashboard"
+
+[[env.production.d1_databases]]
+binding = "DB"
+database_name = "family-health-dashboard-db"
+database_id = "<YOUR_PRODUCTION_D1_DATABASE_ID>"     # fill in after: wrangler d1 create family-health-dashboard-db
+migrations_dir = "src/db/migrations"
+
+[[env.production.r2_buckets]]
+binding = "BUCKET"
+bucket_name = "family-health-dashboard-files"
+
+[[env.production.workflows]]
+binding = "EXTRACTION_WORKFLOW"
+name = "document-extraction"
+class_name = "DocumentExtractionWorkflow"
+
+[env.production.triggers]
+crons = ["0 3 * * *"]

@@ -1,0 +1,4 @@
+JWT_SECRET=change-me-random-string-at-least-32-chars-long
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+CORS_ORIGIN=http://localhost:5173
+ANTHROPIC_API_KEY="sk-ant-..."

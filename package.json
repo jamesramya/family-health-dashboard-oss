@@ -1,0 +1,27 @@
+{
+  "name": "family-health-dashboard",
+  "private": true,
+  "workspaces": [
+    "app",
+    "worker"
+  ],
+  "scripts": {
+    "dev:app": "npm run dev --workspace=app",
+    "dev:worker": "npm run dev --workspace=worker",
+    "build:app": "npm run build --workspace=app",
+    "build:worker": "npm run build --workspace=worker",
+    "test:app": "npm run test --workspace=app",
+    "test:worker": "npm run test --workspace=worker",
+    "test": "npm run test:worker && npm run test:app",
+    "typecheck": "npm run typecheck --workspace=worker && npm run typecheck --workspace=app"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "overrides": {
+    "esbuild": ">=0.17.0 <0.27.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.21.0"
+  }
+}

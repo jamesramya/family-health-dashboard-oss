@@ -1,0 +1,1 @@
+ALTER TABLE refresh_tokens ADD COLUMN long_session INTEGER NOT NULL DEFAULT 0;

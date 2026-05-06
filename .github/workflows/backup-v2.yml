@@ -1,0 +1,51 @@
+name: Nightly Backup (Family Health Dashboard)
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: backup
+          token: ${{ secrets.GH_PAT }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Export D1 database
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          mkdir -p backup
+          TIMESTAMP=$(date -u +"%Y-%m-%dT%H-%M-%SZ")
+          npx wrangler d1 export family-health-dashboard-db \
+            --remote \
+            --output "backup/export-${TIMESTAMP}.sql"
+          echo "Saved backup/export-${TIMESTAMP}.sql"
+
+      - name: Sync R2 documents manifest via wrangler
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx wrangler r2 object list family-health-dashboard-files \
+            --remote > backup/r2-manifest.txt 2>&1 || true
+
+      - name: Commit backup
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backup/
+          git diff --staged --quiet || git commit -m "backup: nightly export $(date -u +%Y-%m-%d)"
+          git push
