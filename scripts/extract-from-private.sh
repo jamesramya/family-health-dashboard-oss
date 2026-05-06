@@ -39,7 +39,7 @@ echo "==> Copying whitelisted paths"
 
 RSYNC="rsync -a --delete"
 EXCLUDE_APP="--exclude=node_modules --exclude=dist --exclude=*.tsbuildinfo"
-EXCLUDE_WORKER="--exclude=node_modules --exclude=*.tsbuildinfo --exclude=.dev.vars --exclude=.wrangler"
+EXCLUDE_WORKER="--exclude=node_modules --exclude=*.tsbuildinfo --exclude=.dev.vars --exclude=.dev.vars.example --exclude=.wrangler"
 
 run "$RSYNC $EXCLUDE_APP \"$SRC/app/\" \"$DST/app/\""
 run "$RSYNC $EXCLUDE_WORKER \"$SRC/worker/\" \"$DST/worker/\""
@@ -47,6 +47,23 @@ run "mkdir -p \"$DST/.github/workflows\""
 run "cp \"$SRC/.github/workflows/deploy-v2.yml\" \"$DST/.github/workflows/deploy-v2.yml\""
 run "cp \"$SRC/.github/workflows/pr-tests.yml\" \"$DST/.github/workflows/pr-tests.yml\""
 run "cp \"$SRC/.github/workflows/backup-v2.yml\" \"$DST/.github/workflows/backup-v2.yml\""
+
+# Write canonical .dev.vars.example (excluded from rsync to avoid overwrite)
+if [[ "$DRY_RUN" != "1" ]]; then
+  cat > "$DST/worker/.dev.vars.example" <<'EOF'
+# Copy this file to .dev.vars and fill in real values for local development.
+# See docs/CONFIGURATION.md for descriptions and how to obtain each value.
+JWT_SECRET=replace-with-32-byte-random-hex
+TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA
+CORS_ORIGIN=http://localhost:5173
+GOOGLE_API_KEY=
+ANTHROPIC_API_KEY=
+OPENAI_API_KEY=
+DEEPGRAM_API_KEY=
+EOF
+else
+  echo "DRY: would write canonical worker/.dev.vars.example"
+fi
 
 # ---------------------------------------------------------------------------
 # 2. Whitelisted root files
