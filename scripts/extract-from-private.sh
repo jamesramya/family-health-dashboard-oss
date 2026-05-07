@@ -172,5 +172,99 @@ else
   echo "OK: no banned strings"
 fi
 
+# ---------------------------------------------------------------------------
+# 6. Secret drift detection
+# ---------------------------------------------------------------------------
+echo "==> Checking for undocumented secrets"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "DRY: would check for undocumented secrets"
+else
+  # Keys already documented in .dev.vars.example
+  DOCUMENTED_KEYS=$(grep -v '^#' "$DST/worker/.dev.vars.example" | grep '=' | cut -d= -f1 | sort -u)
+
+  # Non-secret bindings declared in wrangler.toml (D1, R2, Workflow — binding = "NAME")
+  BINDING_NAMES=$(grep 'binding[[:space:]]*=' "$DST/worker/wrangler.toml" 2>/dev/null \
+    | sed "s/.*binding[[:space:]]*=[[:space:]]*[\"']\\([^\"']*\\)[\"'].*/\\1/" \
+    | sort -u)
+
+  # Plain vars declared in wrangler.toml ([vars] sections — VARNAME = ...)
+  WRANGLER_VARS=$(grep -E '^[A-Z_]+[[:space:]]*=' "$DST/worker/wrangler.toml" 2>/dev/null \
+    | cut -d= -f1 | tr -d ' ' | sort -u)
+
+  # All UPPER_CASE env references in worker source (env.VARNAME pattern)
+  REFERENCED_KEYS=$(rg 'env\.([A-Z][A-Z0-9_]{2,})' -o --replace '$1' \
+    -g '*.ts' --no-filename \
+    "$DST/worker/src" 2>/dev/null | sort -u || true)
+
+  UNDOCUMENTED=()
+  while IFS= read -r KEY; do
+    [[ -z "$KEY" ]] && continue
+    if ! echo "$DOCUMENTED_KEYS" | grep -qx "$KEY" && \
+       ! echo "$BINDING_NAMES"   | grep -qx "$KEY" && \
+       ! echo "$WRANGLER_VARS"   | grep -qx "$KEY"; then
+      UNDOCUMENTED+=("$KEY")
+    fi
+  done <<< "$REFERENCED_KEYS"
+
+  if [[ ${#UNDOCUMENTED[@]} -gt 0 ]]; then
+    echo "WARNING: env vars used in worker/src but missing from .dev.vars.example:"
+    for K in "${UNDOCUMENTED[@]}"; do
+      echo "  - $K"
+    done
+    echo "  → Add to .dev.vars.example and docs/CONFIGURATION.md before publishing."
+  else
+    echo "OK: no undocumented secrets"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 7. Release notes
+# ---------------------------------------------------------------------------
+echo "==> Generating release notes"
+
+NOTES_FILE="$DST/RELEASE_NOTES.md"
+
+if [[ "$DRY_RUN" == "1" ]]; then
+  echo "DRY: would write release notes to $NOTES_FILE"
+else
+  LAST_DATE=$(cd "$DST" && git log -1 --format="%ci" 2>/dev/null || echo "")
+
+  {
+    echo "## $(date -u +%Y-%m-%d)"
+    echo ""
+    if [[ -n "$LAST_DATE" ]]; then
+      COMMITS=$(cd "$SRC" && git log \
+        --after="$LAST_DATE" \
+        --no-merges \
+        --format="- %s" \
+        -- app/ worker/ \
+        | grep -E '^- (feat|fix|docs|refactor|perf|chore)' \
+        | sed \
+          -e 's/Sakkammal J/Demo Patient/g' \
+          -e 's/Sakkamal J/Demo Patient/g' \
+          -e 's/Sakkammal/Demo/g' \
+          -e 's/Sakkamal/Demo/g' \
+          -e 's/sakkammal-j/demo-patient/g' \
+          -e 's/sakkammal/demo/g' \
+          -e 's/sakkamal/demo/g' \
+          -e 's/james@nfnlabs\.in/owner@example.com/g' \
+          -e 's/alameda/Example Lab/g' \
+          -e 's/[Aa]s-[Ss]alam/Example Lab/g' \
+          -e 's/alfa[ -]labs/Example Lab/g' || true)
+      if [[ -n "$COMMITS" ]]; then
+        echo "$COMMITS"
+      else
+        echo "_No significant changes since last release._"
+      fi
+    else
+      echo "_Initial release._"
+    fi
+  } > "$NOTES_FILE"
+
+  echo "Release notes written to: $NOTES_FILE"
+  echo "Paste into: https://github.com/jamesramya/family-health-dashboard-oss/releases/new"
+fi
+
 echo ""
 echo "Done."
