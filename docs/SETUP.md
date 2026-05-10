@@ -238,7 +238,7 @@ Secrets are sensitive values that should **never** be committed to git. There ar
 | `ANTHROPIC_API_KEY` | Claude Haiku for disambiguation | [console.anthropic.com](https://console.anthropic.com) → API keys | Required |
 | `OPENAI_API_KEY` | GPT-4.1 fallback for extraction | [platform.openai.com](https://platform.openai.com) | Optional |
 | `DEEPGRAM_API_KEY` | Voice note transcription | [console.deepgram.com](https://console.deepgram.com) | Optional |
-| `GITHUB_TOKEN` | Nightly database backup | GitHub → Settings → Developer settings → Personal access tokens (needs `repo` scope on a private repo you create) | Optional |
+| `GITHUB_TOKEN` | Nightly database backup | GitHub → Settings → Developer settings → Personal access tokens (fine-grained token scoped to a single private backup repo, with Contents read/write) | Optional |
 | `GITHUB_REPO` | Target repo for backup | e.g. `your-username/health-backup` (must be private) | Optional (if using backup) |
 
 Set each secret for both `staging` and `production` environments.

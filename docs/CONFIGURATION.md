@@ -19,7 +19,7 @@ Set them for **both** `staging` and `production` environments. The `CORS_ORIGIN`
 | `ANTHROPIC_API_KEY` | Required (extraction) | Anthropic API key for Claude Haiku (disambiguation and reference-range arbitration). | [console.anthropic.com](https://console.anthropic.com) → API keys | `worker/src/services/disambiguation-llm.ts`, `worker/src/services/ref-range-arbiter.ts` |
 | `OPENAI_API_KEY` | Optional | OpenAI key for GPT-4.1 mini (fallback if Gemini fails). Without this, failed extractions will not be retried with a fallback model. | [platform.openai.com](https://platform.openai.com) | `worker/src/services/extractor.ts` |
 | `DEEPGRAM_API_KEY` | Optional | Deepgram key for `nova-3` voice transcription. Voice notes are disabled if this is absent. | [console.deepgram.com](https://console.deepgram.com) | `worker/src/services/transcription.ts` |
-| `GITHUB_TOKEN` | Optional (backup) | Personal access token with `repo` scope on the backup repository. Nightly backup is disabled if absent. | GitHub → Settings → Developer settings → Personal access tokens (classic) | `worker/src/services/backup.ts` |
+| `GITHUB_TOKEN` | Optional (backup) | Fine-grained personal access token scoped only to the backup repository (contents: read/write). Nightly backup is disabled if absent. | GitHub → Settings → Developer settings → Personal access tokens (classic) | `worker/src/services/backup.ts` |
 | `GITHUB_REPO` | Optional (backup) | The private GitHub repository that receives nightly backups, in the format `owner/repo`. | Create a private repo on GitHub and paste its name here | `worker/src/services/backup.ts` |
 
 ---
