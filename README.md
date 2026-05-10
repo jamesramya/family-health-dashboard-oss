@@ -4,7 +4,7 @@ A self-hostable, AI-assisted health dashboard for families — runs entirely on 
 
 Track lab results, vitals, medications, scans, and clinical notes for everyone in your household. Upload a PDF lab report and let AI extract the values; watch trends over time; keep medications organised.
 
-<!-- TODO: add screenshots after first deploy -->
+> Add 2–3 screenshots (Dashboard, Blood Work trends, Daily pillbox) before broad public launch.
 
 ---
 
@@ -75,6 +75,27 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full breakdown.
 
 ---
 
+
+## Fork branding (recommended)
+
+Set these Pages build-time variables so your fork shows your own links/branding:
+
+- `VITE_BRAND_NAME`
+- `VITE_BRAND_URL`
+- `VITE_SOURCE_URL`
+
+If not set, the app falls back to neutral placeholder values.
+
+---
+
+## First-time OSS maintainer checklist
+
+- Follow `docs/HISTORY-CLEANUP.md` if any sensitive file ever landed in history.
+- Use GitHub noreply email for public commits.
+- Add repository description, topics, and enable template-repo mode.
+- Keep Dependabot enabled and review updates weekly.
+
+---
 ## Not medical advice
 
 This software is a personal record-keeping tool. It is **not** a medical device and does not provide medical advice. AI extractions can contain errors; reference ranges are approximate. Always verify important values against the source document and consult a qualified healthcare professional before making any medical decisions.

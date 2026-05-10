@@ -1,42 +1,28 @@
 # Contributing
 
-Thank you for your interest in contributing!
+Thanks for contributing!
 
-## Before you start
+## Before opening a PR
 
-- Open an issue to discuss the change before investing significant time in an implementation. For small fixes (typos, doc clarifications) you can go straight to a PR.
-- This project follows [TDD](https://martinfowler.com/bliki/TestDrivenDevelopment.html): write the failing test first, then the implementation.
+1. Open an issue first for non-trivial changes.
+2. Avoid committing secrets, personal data, or deployment identifiers.
+3. Keep changes scoped and include tests when behavior changes.
 
-## Development setup
-
-1. Install Node 20+.
-2. Copy `worker/.dev.vars.example` to `worker/.dev.vars` and fill in the secrets (see [docs/CONFIGURATION.md](docs/CONFIGURATION.md)).
-3. Install dependencies: `npm install` (from the repo root — this covers both workspaces).
-4. Run the worker dev server: `npm run dev:worker`.
-5. Run the app dev server: `npm run dev:app`.
-
-## Running tests
+## Local workflow
 
 ```bash
-npm test               # runs worker tests then app tests
-npm run test:worker    # worker only
-npm run test:app       # app only
-npm run typecheck      # TypeScript check for both workspaces
+npm ci
+npm test
 ```
 
-Tests must pass before submitting a PR. The CI workflow (`pr-tests.yml`) runs the same checks automatically.
+## Security & privacy expectations
 
-## Commit style
+- Never commit `.dev.vars`, API tokens, private keys, account IDs, or patient-identifying information.
+- Use placeholders like `your-username`, `example.com`, and fake IDs in examples.
+- If you find a vulnerability, use GitHub private vulnerability reporting as documented in `SECURITY.md`.
 
-Follow conventional commits: `feat:`, `fix:`, `chore:`, `docs:`, `test:`, `refactor:`. Keep the subject under 72 characters.
+## Pull request checklist
 
-## Pull requests
-
-- Branch from `master`.
-- Keep PRs focused — one logical change per PR.
-- Include tests for any new behaviour.
-- Do not commit secrets, patient data, or personal information.
-
-## Code of conduct
-
-Be kind. This project is used by real families to track health information for loved ones. Treat contributors and users with respect.
+- [ ] Change is documented if setup/config behavior changed
+- [ ] Tests run locally (or explain why not)
+- [ ] No secrets/PII included

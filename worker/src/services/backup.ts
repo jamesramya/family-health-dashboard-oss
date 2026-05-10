@@ -152,7 +152,7 @@ export async function runBackup(env: Bindings): Promise<{ r2: boolean; github: b
 
   // --- GitHub backup ---
   const githubToken = env.GITHUB_TOKEN;
-  const githubRepo = env.GITHUB_REPO; // e.g. "james-ramya/health-backups"
+  const githubRepo = env.GITHUB_REPO; // e.g. "your-username/health-backups"
 
   if (githubToken && githubRepo) {
     try {
