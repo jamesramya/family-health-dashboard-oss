@@ -168,11 +168,12 @@ wrangler r2 bucket create family-health-dashboard-files
 1. In the left sidebar: **Workers & Pages**
 2. Click **Create application** → **Pages** → **Connect to Git**
 3. Connect your GitHub account if prompted, then select your fork of `family-health-dashboard-oss`
-4. Configure the build:
+4. Configure the build (Cloudflare UI labels may vary):
    - **Project name:** `family-health-dashboard-staging`
-   - **Production branch:** `staging`
+   - **Production branch:** `staging` (if you do not see this during setup, set it right after creation in **Settings** → **Builds & deployments**)
    - **Build command:** `npm run build --workspace=app`
-   - **Build output directory:** `app/dist`
+   - **Build output directory:** `app/dist` (if this field is hidden, open **Build settings** / **Advanced settings**)
+   - **Deploy command:** leave empty (or keep default). You do **not** need a deploy command for this repo.
 5. Under **Environment variables** (before saving), add:
    - `API_URL` = (leave blank for now — you'll fill this in after the Worker is deployed in Step 6)
    - `VITE_TURNSTILE_SITE_KEY` = (your Turnstile site key from Step 2d)
