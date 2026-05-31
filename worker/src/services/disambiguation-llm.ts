@@ -1,4 +1,5 @@
 import type { Bindings } from "../types";
+import { resolveAI } from "./ai-resolver";
 
 export interface ExistingTestSummary {
   canonicalKey: string;
@@ -21,21 +22,15 @@ export interface DisambiguationResult {
   model: string;
 }
 
-const MODEL = "claude-haiku-4-5-20251001";
 const TIMEOUT_MS = 10_000;
-
-export function assertDisambiguationEnv(
-  env: Bindings,
-): asserts env is Bindings & { ANTHROPIC_API_KEY: string; AI_GATEWAY_URL: string } {
-  if (!env.AI_GATEWAY_URL) throw new Error("AI_GATEWAY_URL is not configured");
-  if (!env.ANTHROPIC_API_KEY) throw new Error("ANTHROPIC_API_KEY is not configured");
-}
 
 export async function disambiguateTest(
   env: Bindings,
   input: DisambiguationInput,
 ): Promise<DisambiguationResult> {
-  assertDisambiguationEnv(env);
+  const resolved = await resolveAI("test_disambig", env);
+  if (!resolved) throw new Error("No AI config for test_disambig — configure anthropic provider");
+  if (!env.AI_GATEWAY_URL) throw new Error("AI_GATEWAY_URL is not configured");
 
   const existingList = input.existing
     .map((e) => `${e.canonicalKey}: ${e.canonicalName} (${e.unit || "—"})`)
@@ -72,11 +67,12 @@ Return ONLY valid JSON, no preamble:
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": env.ANTHROPIC_API_KEY,
+        "x-api-key": resolved.apiKey,
         "anthropic-version": "2023-06-01",
+        "cf-aig-cache-ttl": "300",
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: resolved.model,
         max_tokens: 300,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -111,6 +107,6 @@ Return ONLY valid JSON, no preamble:
     isDuplicate: Boolean(parsed.is_duplicate),
     matchedCanonicalKey: parsed.is_duplicate ? parsed.matched_canonical_key : null,
     reasoning: parsed.reasoning ?? "",
-    model: MODEL,
+    model: resolved.model,
   };
 }

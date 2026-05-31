@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
 import { FileText } from "lucide-react";
 import { formatDate } from "@/lib/format";
-import type { ScanFinding } from "@/types/api";
+import type { ScanSummary } from "./types";
 
-export function ScanDetailPanel({ scan }: { scan: ScanFinding }) {
+export function ScanDetailPanel({ scan, hideDocumentLink }: { scan: ScanSummary; hideDocumentLink?: boolean }) {
   return (
     <div className="rounded-2xl bg-cream-50 border border-cream-200 p-6 shadow-card space-y-4">
       <header>
@@ -30,7 +30,7 @@ export function ScanDetailPanel({ scan }: { scan: ScanFinding }) {
         </section>
       )}
 
-      {scan.document_id && (
+      {scan.document_id && !hideDocumentLink && (
         <Link
           to={`/documents?doc=${scan.document_id}`}
           className="inline-flex items-center gap-1.5 text-sm text-teal-600 hover:text-teal-700"

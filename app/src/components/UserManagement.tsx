@@ -230,12 +230,12 @@ export function UserManagement() {
                     >
                       {user.role}
                     </span>
-                    {user.is_super_admin && (
+                    {!!user.is_super_admin && (
                       <span className="text-xs bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full font-medium">
                         Super Admin
                       </span>
                     )}
-                    {user.must_change_pw && (
+                    {!!user.must_change_pw && (
                       <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
                         Must change password
                       </span>

@@ -1,11 +1,15 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { parseVitalsText } from "../../src/services/vitals-parser";
 import type { Bindings } from "../../src/types";
 
+vi.mock("../../src/services/ai-resolver", () => ({
+  resolveAI: vi.fn(),
+}));
+
+import { resolveAI } from "../../src/services/ai-resolver";
+
 const MOCK_ENV = {
   AI_GATEWAY_URL: "https://gateway.ai.cloudflare.com/v1/acct/gw",
-  GOOGLE_API_KEY: "test-google-key",
-  OPENAI_API_KEY: "test-openai-key",
 } as unknown as Bindings;
 
 const SAMPLE_VITALS = [
@@ -27,10 +31,18 @@ function openaiOk(data: unknown) {
   );
 }
 
+beforeEach(() => {
+  vi.mocked(resolveAI).mockResolvedValue({
+    provider: "google",
+    model: "gemini-2.5-flash",
+    apiKey: "test-google-key",
+  });
+});
+
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe("parseVitalsText", () => {
-  it("returns structured vitals from Gemini 2.0 Flash on success", async () => {
+  it("returns structured vitals from Gemini on success", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(geminiOk(SAMPLE_VITALS)));
 
     const result = await parseVitalsText("BP 130/85, HR 72", MOCK_ENV);
@@ -41,58 +53,56 @@ describe("parseVitalsText", () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to GPT-4.1 nano when Gemini fails with HTTP error", async () => {
-    const geminiError = new Response("Service unavailable", { status: 503 });
-    vi.stubGlobal("fetch", vi.fn()
-      .mockResolvedValueOnce(geminiError)
-      .mockResolvedValueOnce(openaiOk(SAMPLE_VITALS))
-    );
+  it("uses OpenAI when resolver returns openai provider", async () => {
+    vi.mocked(resolveAI).mockResolvedValue({
+      provider: "openai",
+      model: "gpt-4.1",
+      apiKey: "sk-openai-test",
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(openaiOk(SAMPLE_VITALS)));
 
     const result = await parseVitalsText("BP 130/85, HR 72", MOCK_ENV);
 
     expect(result).toEqual(SAMPLE_VITALS);
-    expect(fetch).toHaveBeenCalledTimes(2);
-    const openaiCall = (vi.mocked(fetch).mock.calls[1][0] as string);
-    expect(openaiCall).toContain("openai");
+    const url = (vi.mocked(fetch).mock.calls[0][0] as string);
+    expect(url).toContain("openai");
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to GPT-4.1 nano when Gemini throws a network error", async () => {
-    vi.stubGlobal("fetch", vi.fn()
-      .mockRejectedValueOnce(new Error("network timeout"))
-      .mockResolvedValueOnce(openaiOk(SAMPLE_VITALS))
-    );
-
-    const result = await parseVitalsText("BP 130/85", MOCK_ENV);
-
-    expect(result).toEqual(SAMPLE_VITALS);
-    expect(fetch).toHaveBeenCalledTimes(2);
-  });
-
-  it("throws when both Gemini and GPT fail", async () => {
-    vi.stubGlobal("fetch", vi.fn()
-      .mockRejectedValueOnce(new Error("Gemini down"))
-      .mockRejectedValueOnce(new Error("OpenAI down"))
-    );
+  it("throws when resolveAI returns null", async () => {
+    vi.mocked(resolveAI).mockResolvedValue(null);
 
     await expect(parseVitalsText("BP 130/85", MOCK_ENV))
-      .rejects.toThrow("OpenAI down");
+      .rejects.toThrow(/vitals_parse/);
   });
 
-  it("skips GPT fallback when OPENAI_API_KEY is not set", async () => {
-    const envWithoutOpenAI = { ...MOCK_ENV, OPENAI_API_KEY: undefined } as unknown as Bindings;
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("Gemini down")));
+  it("throws when AI_GATEWAY_URL is not configured", async () => {
+    const envNoGateway = { ...MOCK_ENV, AI_GATEWAY_URL: undefined } as unknown as Bindings;
 
-    await expect(parseVitalsText("BP 130/85", envWithoutOpenAI))
-      .rejects.toThrow("Gemini down");
-    expect(fetch).toHaveBeenCalledTimes(1);
+    await expect(parseVitalsText("BP 130/85", envNoGateway))
+      .rejects.toThrow(/AI_GATEWAY_URL/);
+  });
+
+  it("throws on unsupported provider", async () => {
+    vi.mocked(resolveAI).mockResolvedValue({
+      provider: "anthropic",
+      model: "claude-haiku-4-5-20251001",
+      apiKey: "sk-ant-test",
+    });
+
+    await expect(parseVitalsText("BP 130/85", MOCK_ENV))
+      .rejects.toThrow(/unsupported provider/);
+  });
+
+  it("throws on Gemini HTTP error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Service unavailable", { status: 503 })));
+
+    await expect(parseVitalsText("BP 130/85", MOCK_ENV))
+      .rejects.toThrow(/503/);
   });
 
   it("handles Gemini response wrapped in markdown code fences", async () => {
     const wrapped = `\`\`\`json\n${JSON.stringify(SAMPLE_VITALS)}\n\`\`\``;
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(geminiOk(wrapped)));
-
-    // geminiOk wraps in Gemini response envelope but text is already a string,
-    // not double-encoded — reuse raw text response directly
     const rawGeminiResponse = new Response(
       JSON.stringify({ candidates: [{ content: { parts: [{ text: wrapped }] } }] }),
       { status: 200, headers: { "Content-Type": "application/json" } }
@@ -101,5 +111,30 @@ describe("parseVitalsText", () => {
 
     const result = await parseVitalsText("BP 130/85, HR 72", MOCK_ENV);
     expect(result).toEqual(SAMPLE_VITALS);
+  });
+
+  it("sends cf-aig-cache-ttl: 300 header on Gemini path", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(geminiOk(SAMPLE_VITALS)));
+
+    await parseVitalsText("BP 130/85, HR 72", MOCK_ENV);
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["cf-aig-cache-ttl"]).toBe("300");
+  });
+
+  it("sends cf-aig-cache-ttl: 300 header on OpenAI path", async () => {
+    vi.mocked(resolveAI).mockResolvedValue({
+      provider: "openai",
+      model: "gpt-4.1",
+      apiKey: "sk-openai-test",
+    });
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(openaiOk(SAMPLE_VITALS)));
+
+    await parseVitalsText("BP 130/85, HR 72", MOCK_ENV);
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["cf-aig-cache-ttl"]).toBe("300");
   });
 });

@@ -58,19 +58,25 @@ export function Appearance() {
       <Group label="Text size" name="textSize" current={prefs?.textSize}
         options={[{ value: "normal", label: "Normal" }, { value: "large", label: "Large" }, { value: "xl", label: "XL" }]}
         onChange={(v) => setPref("textSize", v)} />
-      <Group label="Density" name="density" current={prefs?.density}
-        options={[{ value: "comfortable", label: "Comfortable" }, { value: "compact", label: "Compact" }]}
-        onChange={(v) => setPref("density", v)} />
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-faint mb-2">Density</p>
+        <div className="flex items-center gap-3">
+          <span className="px-3 py-1 bg-cream-200 text-ink-soft text-sm font-medium rounded-full">Comfortable</span>
+          <button type="button" disabled className="text-sm text-teal-600 hover:underline opacity-40 cursor-not-allowed">Change</button>
+        </div>
+        <p className="mt-1 text-xs text-ink-faint">Comfortable is the current density.</p>
+      </div>
       <Group label="Status language" name="statusLanguage" current={prefs?.statusLanguage}
         options={[{ value: "plain", label: "Plain English" }, { value: "medical", label: "Clinical HIGH-LOW" }]}
         onChange={(v) => setPref("statusLanguage", v)} />
-      <Group label="Language" name="language" current={prefs?.language}
-        options={[
-          { value: "en", label: "English" },
-          { value: "ta", label: "Tamil" },
-          { value: "fr", label: "Français" },
-        ]}
-        onChange={(v) => setPref("language", v)} />
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-ink-faint mb-2">Language</p>
+        <div className="flex items-center gap-3">
+          <span className="px-3 py-1 bg-cream-200 text-ink-soft text-sm font-medium rounded-full">English</span>
+          <button type="button" disabled className="text-sm text-teal-600 hover:underline opacity-40 cursor-not-allowed">Change</button>
+        </div>
+        <p className="mt-1 text-xs text-ink-faint">English is the current language.</p>
+      </div>
     </Card>
   );
 }

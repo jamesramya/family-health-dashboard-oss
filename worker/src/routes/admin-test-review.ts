@@ -8,21 +8,8 @@ type Variables = {
 
 export const adminTestReviewRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-async function checkSuperAdmin(c: any): Promise<boolean> {
-  const user = c.get("user") as { sub: string; role: string; email: string } | undefined;
-  if (!user) return false;
-  const row = await c.env.DB.prepare(
-    "SELECT is_super_admin FROM users WHERE id = ?",
-  ).bind(user.sub).first() as { is_super_admin: number } | null;
-  return row?.is_super_admin === 1;
-}
-
 // GET /test-review — list needs_review definitions with merge candidates
 adminTestReviewRoutes.get("/", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const { results: items } = await c.env.DB.prepare(
     `SELECT id, canonical_key, canonical_name, label, unit, category, ref_low, ref_high, aliases, created_at
      FROM test_definitions WHERE needs_review = 1 AND is_deleted = 0
@@ -54,10 +41,6 @@ adminTestReviewRoutes.get("/", async (c) => {
 
 // POST /test-review/:id/merge — merge into target definition
 adminTestReviewRoutes.post("/:id/merge", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const id = c.req.param("id");
   const body = await c.req.json<{ targetTestDefId: string }>();
   if (!body.targetTestDefId) {
@@ -106,10 +89,6 @@ adminTestReviewRoutes.post("/:id/merge", async (c) => {
 
 // POST /test-review/:id/confirm — keep as new definition, clear needs_review
 adminTestReviewRoutes.post("/:id/confirm", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const id = c.req.param("id");
   const body = await c.req.json<{ canonicalName?: string }>().catch(() => ({}) as { canonicalName?: string });
 
@@ -134,10 +113,6 @@ adminTestReviewRoutes.post("/:id/confirm", async (c) => {
 
 // POST /test-review/:id/delete — delete definition + readings
 adminTestReviewRoutes.post("/:id/delete", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const id = c.req.param("id");
   const body = await c.req.json<{ confirm: string }>();
   if (body.confirm !== "DELETE") {

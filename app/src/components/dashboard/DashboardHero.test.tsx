@@ -7,7 +7,7 @@ import type { Patient } from "@/types/api";
 
 const PATIENT: Patient = {
   id: "p1", name: "Demo", date_of_birth: "1950-03-04", gender: "f",
-  blood_type: "O+", allergies: null, photo_r2_key: null,
+  blood_type: "O+", allergies: null, photo_r2_key: null, created_at: "2024-02-01T00:00:00.000Z",
 };
 
 function renderHero(overrides: Partial<Parameters<typeof DashboardHero>[0]> = {}) {

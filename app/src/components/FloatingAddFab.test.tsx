@@ -40,7 +40,7 @@ describe("FloatingAddFab", () => {
     expect(screen.getByText("Upload Lab")).toBeInTheDocument();
     expect(screen.getByText("Add Note")).toBeInTheDocument();
     expect(screen.getByText("Add Scan")).toBeInTheDocument();
-    expect(screen.getByText("Upload Document")).toBeInTheDocument();
+    expect(screen.getByText("Upload Documents")).toBeInTheDocument();
   });
 
   it("clicking 'Log Vital' pill calls onAction('vital') and closes the fan", async () => {

@@ -1,9 +1,10 @@
 // worker/src/services/vitals-parser.ts
 //
-// NLP vitals extraction: Gemini 2.0 Flash (primary) → GPT-4.1 nano (fallback).
-// Both calls go through the Cloudflare AI Gateway for unified observability.
+// NLP vitals extraction via the configured vitals_parse use-case (resolved from D1 routing,
+// with env binding fallback). Fallback chain removed — per routing config, use a single model.
 
 import type { Bindings } from "../types";
+import { resolveAI } from "./ai-resolver";
 
 export interface ParsedVital {
   type: string;
@@ -38,10 +39,6 @@ Return ONLY a valid JSON array, no markdown, no explanation.
 Text: "${text}"`;
 };
 
-// ---------------------------------------------------------------------------
-// JSON extraction — strips markdown fences if present
-// ---------------------------------------------------------------------------
-
 function extractJson(raw: string): ParsedVital[] {
   const cleaned = raw
     .replace(/^```(?:json)?\s*/i, "")
@@ -58,16 +55,19 @@ function extractJson(raw: string): ParsedVital[] {
   return parsed.filter((v) => VALID_TYPES.has(v.type) && typeof v.value_primary === "number");
 }
 
-// ---------------------------------------------------------------------------
-// Gemini 2.0 Flash via AI Gateway
-// ---------------------------------------------------------------------------
-
-async function parseWithGemini(text: string, timezone: string, localDate: string, env: Bindings): Promise<ParsedVital[]> {
-  const url = `${env.AI_GATEWAY_URL}/google-ai-studio/v1/models/gemini-2.5-flash:generateContent`;
+async function parseWithGemini(
+  text: string,
+  timezone: string,
+  localDate: string,
+  apiKey: string,
+  model: string,
+  gatewayUrl: string,
+): Promise<ParsedVital[]> {
+  const url = `${gatewayUrl}/google-ai-studio/v1/models/${model}:generateContent`;
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { "x-goog-api-key": env.GOOGLE_API_KEY!, "Content-Type": "application/json" },
+    headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json", "cf-aig-cache-ttl": "300" },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt(text, timezone, localDate) }] }],
       generationConfig: { temperature: 0 },
@@ -84,18 +84,21 @@ async function parseWithGemini(text: string, timezone: string, localDate: string
   return extractJson(raw);
 }
 
-// ---------------------------------------------------------------------------
-// GPT-4.1 nano via AI Gateway
-// ---------------------------------------------------------------------------
-
-async function parseWithGpt(text: string, timezone: string, localDate: string, env: Bindings): Promise<ParsedVital[]> {
-  const url = `${env.AI_GATEWAY_URL}/openai/v1/chat/completions`;
+async function parseWithOpenAI(
+  text: string,
+  timezone: string,
+  localDate: string,
+  apiKey: string,
+  model: string,
+  gatewayUrl: string,
+): Promise<ParsedVital[]> {
+  const url = `${gatewayUrl}/openai/v1/chat/completions`;
 
   const res = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "cf-aig-cache-ttl": "300" },
     body: JSON.stringify({
-      model: "gpt-4.1-nano",
+      model,
       messages: [{ role: "user", content: prompt(text, timezone, localDate) }],
       temperature: 0,
       response_format: { type: "json_object" },
@@ -104,7 +107,7 @@ async function parseWithGpt(text: string, timezone: string, localDate: string, e
 
   if (!res.ok) {
     const err = await res.text().catch(() => "");
-    throw new Error(`GPT-4.1 nano ${res.status}: ${err.slice(0, 200)}`);
+    throw new Error(`OpenAI ${res.status}: ${err.slice(0, 200)}`);
   }
 
   const data = await res.json<{ choices: { message: { content: string } }[] }>();
@@ -112,17 +115,25 @@ async function parseWithGpt(text: string, timezone: string, localDate: string, e
   return extractJson(raw);
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
+export async function parseVitalsText(
+  text: string,
+  env: Bindings,
+  timezone?: string,
+  localDate?: string,
+): Promise<ParsedVital[]> {
+  const resolved = await resolveAI("vitals_parse", env);
+  if (!resolved) throw new Error("No AI config for vitals_parse — configure a provider");
+  if (!env.AI_GATEWAY_URL) throw new Error("AI_GATEWAY_URL is not configured");
 
-export async function parseVitalsText(text: string, env: Bindings, timezone?: string, localDate?: string): Promise<ParsedVital[]> {
   const tz = timezone ?? "UTC";
   const date = localDate ?? new Date().toISOString().slice(0, 10);
-  try {
-    return await parseWithGemini(text, tz, date, env);
-  } catch (geminiErr) {
-    if (!env.OPENAI_API_KEY) throw geminiErr;
-    return await parseWithGpt(text, tz, date, env);
+
+  if (resolved.provider === "google") {
+    return parseWithGemini(text, tz, date, resolved.apiKey, resolved.model, env.AI_GATEWAY_URL);
   }
+  if (resolved.provider === "openai") {
+    return parseWithOpenAI(text, tz, date, resolved.apiKey, resolved.model, env.AI_GATEWAY_URL);
+  }
+
+  throw new Error(`vitals_parse: unsupported provider '${resolved.provider}'`);
 }

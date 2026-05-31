@@ -17,11 +17,23 @@ function wrap(ui: React.ReactElement) {
 }
 
 describe("Appearance", () => {
-  it("renders three toggle groups", async () => {
+  it("renders text size and status language toggle groups", async () => {
     render(wrap(<Appearance />));
     expect(await screen.findByRole("radiogroup", { name: /text size/i })).toBeInTheDocument();
-    expect(screen.getByRole("radiogroup", { name: /density/i })).toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: /density/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("radiogroup", { name: /^language$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("radiogroup", { name: /status language/i })).toBeInTheDocument();
+  });
+
+  it("renders language row as disabled (not interactive)", async () => {
+    render(wrap(<Appearance />));
+    expect(await screen.findByText("English is the current language.")).toBeInTheDocument();
+  });
+
+  it("renders density row as disabled (not interactive)", async () => {
+    render(wrap(<Appearance />));
+    expect(await screen.findByText("Comfortable is the current density.")).toBeInTheDocument();
+    expect(screen.getByText("Comfortable", { selector: "span" })).toBeInTheDocument();
   });
 
   it("renders theme row with current theme name", async () => {

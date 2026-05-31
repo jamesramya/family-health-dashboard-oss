@@ -6,9 +6,6 @@ interface Props {
   children: ReactNode;
 }
 
-const BRAND_NAME = import.meta.env.VITE_BRAND_NAME ?? "Family Health";
-const BRAND_URL = import.meta.env.VITE_BRAND_URL ?? "https://example.com";
-
 const DEFAULT_TITLE = "A shared record of everyone you care for.";
 const DEFAULT_BODY =
   "Labs, vitals, medications and notes for Amma, Appa, the kids, you — all in one place. Self-hosted. Open source. Your data stays with you.";
@@ -28,7 +25,7 @@ export function AuthShell({
             <circle cx="14" cy="14" r="13" fill="#fdfbf5" />
             <path d="M14 7v14M7 14h14" stroke="#1b3e36" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
-          <span className="font-display text-2xl leading-none">{BRAND_NAME}</span>
+          <span className="font-display text-2xl leading-none">Family Health</span>
         </div>
 
         {/* Hero copy */}
@@ -39,7 +36,7 @@ export function AuthShell({
 
         {/* Footer */}
         <p className="relative z-10 text-xs text-cream-200/50">
-          v1.4 · MIT licensed · {BRAND_URL.replace(/^https?:\/\//, "")}
+          v1.4 · MIT licensed · familyhealth.dev
         </p>
 
         {/* Radial glow decoration */}
@@ -54,7 +51,7 @@ export function AuthShell({
             <circle cx="14" cy="14" r="13" fill="#2f6b5f" />
             <path d="M14 7v14M7 14h14" stroke="white" strokeWidth="2.5" strokeLinecap="round" />
           </svg>
-          <span className="font-display text-xl text-teal-600 leading-none">{BRAND_NAME}</span>
+          <span className="font-display text-xl text-teal-600 leading-none">Family Health</span>
         </div>
 
         <div className="w-full max-w-sm">{children}</div>

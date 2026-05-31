@@ -34,14 +34,9 @@ describe("Sidebar", () => {
     }
   });
 
-  it("hides Admin by default", () => {
-    renderSidebar(false);
-    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
-  });
-
-  it("shows Admin when isAdmin is true", () => {
+  it("never renders an Admin nav link", () => {
     renderSidebar(true);
-    expect(screen.getByRole("link", { name: "Admin" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
   });
 
   it("renders the user footer with display name and sign out icon button", () => {

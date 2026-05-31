@@ -1,11 +1,24 @@
-import { describe, it, expect, vi, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { arbitrateRefRange } from "../../src/services/ref-range-arbiter";
 import type { Bindings } from "../../src/types";
 
+vi.mock("../../src/services/ai-resolver", () => ({
+  resolveAI: vi.fn(),
+}));
+
+import { resolveAI } from "../../src/services/ai-resolver";
+
 const MOCK_ENV = {
   AI_GATEWAY_URL: "https://gateway.ai.cloudflare.com/v1/acct/gw",
-  ANTHROPIC_API_KEY: "sk-ant-test",
 } as unknown as Bindings;
+
+beforeEach(() => {
+  vi.mocked(resolveAI).mockResolvedValue({
+    provider: "anthropic",
+    model: "claude-haiku-4-5-20251001",
+    apiKey: "sk-ant-test",
+  });
+});
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -57,5 +70,13 @@ describe("arbitrateRefRange", () => {
       canonicalName: "Sodium", unit: "mmol/L", patientAgeYears: 65, patientGender: "female",
       competingRanges: [{ refLow: 136, refHigh: 145 }, { refLow: 136, refHigh: 146 }],
     })).rejects.toThrow();
+  });
+
+  it("throws when resolveAI returns null", async () => {
+    vi.mocked(resolveAI).mockResolvedValue(null);
+    await expect(arbitrateRefRange(MOCK_ENV, {
+      canonicalName: "Sodium", unit: "mmol/L", patientAgeYears: 65, patientGender: "female",
+      competingRanges: [{ refLow: 136, refHigh: 145 }, { refLow: 136, refHigh: 146 }],
+    })).rejects.toThrow(/ref_range/);
   });
 });

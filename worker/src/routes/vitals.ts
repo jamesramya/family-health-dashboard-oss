@@ -298,7 +298,7 @@ vitalsRoutes.post("/import", async (c) => {
 });
 
 // POST /api/patients/:pid/vitals/parse — NLP → structured JSON (admin only)
-// Primary: Gemini 2.0 Flash · Fallback: GPT-4.1 nano (requires OPENAI_API_KEY secret)
+// Provider resolved at runtime via ai_use_case_routing (defaults to google/gemini-2.5-flash).
 vitalsRoutes.post("/parse", async (c) => {
   const patientRole = c.get("patientRole");
 
@@ -309,10 +309,6 @@ vitalsRoutes.post("/parse", async (c) => {
   const body = await c.req.json<{ text: string; timezone?: string; localDate?: string }>();
   if (!body.text) {
     return c.json({ error: "text is required" }, 400);
-  }
-
-  if (!c.env.GOOGLE_API_KEY) {
-    return c.json({ error: "GOOGLE_API_KEY not configured on server" }, 500);
   }
 
   try {

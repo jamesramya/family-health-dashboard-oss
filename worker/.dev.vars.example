@@ -7,3 +7,6 @@ GOOGLE_API_KEY=
 ANTHROPIC_API_KEY=
 OPENAI_API_KEY=
 DEEPGRAM_API_KEY=
+# Optional: nightly backup to a private GitHub repo
+GITHUB_TOKEN=
+GITHUB_REPO=

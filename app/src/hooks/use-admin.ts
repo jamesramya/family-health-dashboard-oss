@@ -134,17 +134,9 @@ export function usePurgePatientData() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (patientId: string) =>
-      api.delete(`/admin/patients/${patientId}/purge`),
+      api.delete(`/patients/${patientId}/purge`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["patients"] });
     },
-  });
-}
-
-// ---- API keys ----
-
-export function useRotateApiKey() {
-  return useMutation({
-    mutationFn: () => api.post<{ api_key: string }>("/admin/rotate-api-key"),
   });
 }

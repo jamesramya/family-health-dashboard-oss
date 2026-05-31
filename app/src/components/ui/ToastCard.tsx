@@ -24,6 +24,7 @@ export function ToastCard({ children, exiting, onExited, onDismiss }: ToastCardP
   }, [exiting, onExited]);
 
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if ((e.target as Element).closest("button, a, [role='button']")) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     swipeStart.current = { x: e.clientX, time: Date.now() };
   }

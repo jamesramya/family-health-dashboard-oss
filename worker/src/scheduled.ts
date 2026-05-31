@@ -92,7 +92,16 @@ export async function handleScheduled(
     r2ObjectsDeleted
   ).run();
 
-  // Run backup after purge (so we back up the cleaned state)
-  const backupResult = await runBackup(env);
-  console.log(`[backup] r2=${backupResult.r2} github=${backupResult.github}`);
+  // Sweep ephemeral tables — OAuth auth codes, old refresh tokens, write confirmations
+  await env.DB.batch([
+    env.DB.prepare("DELETE FROM oauth_auth_codes WHERE expires_at < datetime('now')"),
+    env.DB.prepare("DELETE FROM oauth_refresh_tokens WHERE expires_at < datetime('now', '-7 days')"),
+    env.DB.prepare("DELETE FROM write_confirmations WHERE expires_at < datetime('now')"),
+  ]);
+
+  // Run backup after purge (so we back up the cleaned state) — skip in test env
+  if (env.ENVIRONMENT !== "test") {
+    const backupResult = await runBackup(env);
+    console.log(`[backup] r2=${backupResult.r2} github=${backupResult.github}`);
+  }
 }

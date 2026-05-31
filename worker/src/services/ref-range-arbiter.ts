@@ -1,5 +1,5 @@
 import type { Bindings } from "../types";
-import { assertDisambiguationEnv } from "./disambiguation-llm";
+import { resolveAI } from "./ai-resolver";
 
 export interface CompetingRange {
   refLow: number | null;
@@ -22,8 +22,6 @@ export interface ArbitrationResult {
   model: string;
 }
 
-const MODEL = "claude-haiku-4-5-20251001";
-
 export async function arbitrateRefRange(
   env: Bindings,
   input: ArbitrateInput,
@@ -45,7 +43,9 @@ export async function arbitrateRefRange(
     };
   }
 
-  assertDisambiguationEnv(env);
+  const resolved = await resolveAI("ref_range", env);
+  if (!resolved) throw new Error("No AI config for ref_range — configure anthropic provider");
+  if (!env.AI_GATEWAY_URL) throw new Error("AI_GATEWAY_URL is not configured");
 
   const prompt = `You are a clinical laboratory reference expert.
 For the test "${input.canonicalName}" (unit: ${input.unit || "unspecified"}), produce the single reference range appropriate for an adult ${input.patientGender ?? "unspecified-gender"} patient aged ${input.patientAgeYears ?? "unspecified"} years.
@@ -62,11 +62,12 @@ Reply with JSON ONLY, no prose, shape:
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-api-key": env.ANTHROPIC_API_KEY,
+      "x-api-key": resolved.apiKey,
       "anthropic-version": "2023-06-01",
+      "cf-aig-cache-ttl": "300",
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: resolved.model,
       max_tokens: 512,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -103,6 +104,6 @@ Reply with JSON ONLY, no prose, shape:
     refHigh: parsed.ref_high,
     refSource: "clinical",
     refNote: `${parsed.source_citation} — ${parsed.reasoning}`,
-    model: MODEL,
+    model: resolved.model,
   };
 }

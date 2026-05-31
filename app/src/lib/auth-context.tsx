@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api } from "@/lib/api";
+import { api, ApiError } from "@/lib/api";
 import type { User, AuthMeResponse, LoginResponse } from "@/types/api";
 
 interface AuthContextValue {
@@ -13,6 +13,7 @@ interface AuthContextValue {
   isLoading: boolean;
   login: (email: string, password: string, turnstileToken: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -29,8 +30,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .then((data) => {
         if (!cancelled) setUser(data.user);
       })
-      .catch(() => {
-        if (!cancelled) setUser(null);
+      .catch((e) => {
+        if (!cancelled) {
+          setUser(null);
+          if (e instanceof ApiError && e.status === 401) {
+            const pub = ["/login", "/setup", "/change-password", "/invite/accept"];
+            const isPublic =
+              pub.some((p) => window.location.pathname.startsWith(p)) ||
+              window.location.pathname.startsWith("/share/");
+            if (!isPublic) {
+              const here = window.location.pathname + window.location.search;
+              window.location.href = "/login?returnTo=" + encodeURIComponent(here);
+            }
+          }
+        }
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -69,8 +82,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function refreshUser(): Promise<void> {
+    const data = await api.get<AuthMeResponse>("/auth/me");
+    setUser(data.user);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, login, logout, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

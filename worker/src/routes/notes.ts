@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Bindings } from "../types";
 import { transcribeAudio } from "../services/transcription";
+import { resolveAI } from "../services/ai-resolver";
 
 type Variables = {
   user: { sub: string; role: string; email: string };
@@ -107,9 +108,12 @@ notesRoutes.post("/", async (c) => {
       httpMetadata: { contentType: "audio/webm" },
     });
 
-    if (transcribeFlag && c.env.DEEPGRAM_API_KEY) {
+    if (transcribeFlag) {
       try {
-        audioTranscript = await transcribeAudio(c.env.DEEPGRAM_API_KEY, audioBuffer);
+        const resolved = await resolveAI("voice_trans", c.env);
+        if (resolved) {
+          audioTranscript = await transcribeAudio(resolved.apiKey, audioBuffer);
+        }
       } catch (err) {
         console.error("Auto-transcription failed:", err);
       }
@@ -166,22 +170,25 @@ notesRoutes.post("/:nid/transcribe", async (c) => {
   const nid = c.req.param("nid");
 
   if (patientRole !== "admin") return c.json({ error: "Forbidden" }, 403);
-  if (!c.env.DEEPGRAM_API_KEY) return c.json({ error: "Deepgram not configured" }, 503);
 
   const note = await c.env.DB.prepare(
     "SELECT id, audio_r2_key, audio_transcript FROM clinical_notes WHERE id = ? AND patient_id = ? AND is_deleted = 0"
   ).bind(nid, pid).first<{ id: string; audio_r2_key: string | null; audio_transcript: string | null }>();
 
-  if (!note || !note.audio_r2_key) return c.json({ error: "Note not found or no audio" }, 404);
+  if (!note) return c.json({ error: "Note not found or no audio" }, 404);
   if (note.audio_transcript !== null) return c.json({ error: "Transcript already exists" }, 409);
 
+  const resolved = await resolveAI("voice_trans", c.env);
+  if (!resolved) return c.json({ error: "Voice transcription not configured" }, 503);
+
+  if (!note.audio_r2_key) return c.json({ error: "Note not found or no audio" }, 404);
   const obj = await c.env.BUCKET.get(note.audio_r2_key);
   if (!obj) return c.json({ error: "Audio not found in storage" }, 404);
 
   const audioBuffer = await obj.arrayBuffer();
 
   try {
-    const transcript = await transcribeAudio(c.env.DEEPGRAM_API_KEY, audioBuffer);
+    const transcript = await transcribeAudio(resolved.apiKey, audioBuffer);
     await c.env.DB.prepare(
       "UPDATE clinical_notes SET audio_transcript = ?, updated_at = ? WHERE id = ?"
     ).bind(transcript, new Date().toISOString(), nid).run();

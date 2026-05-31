@@ -1,5 +1,20 @@
-import { describe, it, expect } from "vitest";
-import { PROMPT_BLOOD_REPORT, PROMPT_CULTURE } from "../../src/services/extractor";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { PROMPT_BLOOD_REPORT, PROMPT_CULTURE, classify } from "../../src/services/extractor";
+import type { Bindings } from "../../src/types";
+
+const MOCK_ENV = {
+  AI_GATEWAY_URL: "https://gateway.ai.cloudflare.com/v1/acct/gw",
+  GOOGLE_API_KEY: "test-google-key",
+} as unknown as Bindings;
+
+function geminiOk(text: string) {
+  return new Response(
+    JSON.stringify({ candidates: [{ content: { parts: [{ text }] } }] }),
+    { status: 200, headers: { "Content-Type": "application/json" } },
+  );
+}
+
+afterEach(() => vi.restoreAllMocks());
 
 describe("extractor prompt", () => {
   it("requires Title Case canonical_name", () => {
@@ -23,5 +38,17 @@ describe("PROMPT_CULTURE", () => {
   });
   it("instructs S/I/R sensitivity extraction", () => {
     expect(PROMPT_CULTURE).toMatch(/"S"\s*\|\s*"I"\s*\|\s*"R"/);
+  });
+});
+
+describe("classify (Gemini fetch)", () => {
+  it("sends cf-aig-cache-ttl: 300 header for AI Gateway response caching", async () => {
+    const fetchSpy = vi.spyOn(global, "fetch").mockResolvedValue(geminiOk("blood_report"));
+
+    await classify(new Uint8Array([1, 2, 3]), "application/pdf", MOCK_ENV);
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["cf-aig-cache-ttl"]).toBe("300");
   });
 });

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
 import {
   X, Home, FlaskConical, Heart, Pill, NotebookPen, Microscope,
-  FolderOpen, Settings as SettingsIcon, Shield, LogOut, type LucideIcon,
+  FolderOpen, Settings as SettingsIcon, LogOut, type LucideIcon,
 } from "lucide-react";
 import { useFocusTrap } from "@/hooks/useFocusTrap";
 import type { SidebarUser } from "@/components/Sidebar";
@@ -112,19 +112,6 @@ export function MobileDrawer({ isOpen, onClose, user, onSignOut }: MobileDrawerP
               <Icon size={18} aria-hidden /> {label}
             </NavLink>
           ))}
-          {user.isAdmin && (
-            <NavLink
-              to="/admin"
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-3 rounded-xl text-sm font-medium min-h-[48px] transition-colors duration-200 ease-out-strong ${
-                  isActive ? "bg-teal-50 text-teal-700" : "text-ink-soft [@media(hover:hover)]:hover:bg-cream-100 active:bg-cream-200"
-                }`
-              }
-            >
-              <Shield size={18} aria-hidden /> Admin
-            </NavLink>
-          )}
         </nav>
         <div className="px-5 py-4 border-t border-cream-200">
           <div className="flex items-center gap-3">

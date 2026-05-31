@@ -110,7 +110,7 @@ describe("QuickAddModal — META titles", () => {
     ["vital", "Log Vital"],
     ["medication", "Add Medication"],
     ["note", "Add Note"],
-    ["document", "Upload Document"],
+    ["document", "Upload Documents"],
     ["lab", "Upload Lab"],
     ["scan", "Add Scan"],
   ];

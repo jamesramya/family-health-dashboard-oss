@@ -2,7 +2,7 @@
 import { WorkflowEntrypoint, WorkflowStep, WorkflowEvent } from "cloudflare:workers";
 import type { Bindings } from "../types";
 import { extractDocument } from "../services/extractor";
-import type { ExtractionResult, CultureReportExtraction } from "../services/extractor";
+import type { ExtractionResult, CultureReportExtraction, BloodTest } from "../services/extractor";
 import { mergeOrCreate } from "../services/test-merger";
 
 interface ExtractionParams {
@@ -21,14 +21,34 @@ type DocumentRow = {
   [key: string]: string | number | boolean | null;
 };
 
+/**
+ * Resolves each test to a test_definition ID via mergeOrCreate (may call LLM for new tests).
+ * Returns a map of extraction-array index → testDefId.
+ * Isolated here so the Workflow can memoize these LLM calls in their own step.do,
+ * preventing downstream D1 failures from replaying them.
+ */
+export async function resolveTestDefinitions(
+  env: Bindings,
+  db: D1Database,
+  tests: BloodTest[] | undefined,
+  userId: string,
+): Promise<Record<number, string>> {
+  if (!tests || tests.length === 0) return {};
+  const result: Record<number, string> = {};
+  for (let i = 0; i < tests.length; i++) {
+    const merge = await mergeOrCreate(env, db, tests[i], userId);
+    result[i] = merge.testDefId;
+  }
+  return result;
+}
 
 export async function persistExtractedTests(
-  env: Bindings,
   db: D1Database,
   extraction: ExtractionResult,
   patientId: string,
   documentId: string,
   userId: string,
+  resolvedTestDefs: Record<number, string>,
 ): Promise<void> {
   if (!extraction.tests || extraction.tests.length === 0) return;
   const now = new Date().toISOString();
@@ -36,8 +56,9 @@ export async function persistExtractedTests(
     .bind(documentId).first<{ document_date: string }>();
   const documentDate = doc?.document_date ?? now.slice(0, 10);
 
-  for (const t of extraction.tests) {
-    const merge = await mergeOrCreate(env, db, t, userId);
+  for (let i = 0; i < extraction.tests.length; i++) {
+    const t = extraction.tests[i];
+    const testDefId = resolvedTestDefs[i];
     await db.prepare(
       `INSERT OR IGNORE INTO test_results
          (id, patient_id, test_def_id, document_id, date, value, flag,
@@ -46,7 +67,7 @@ export async function persistExtractedTests(
           created_by, updated_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     ).bind(
-      crypto.randomUUID(), patientId, merge.testDefId, documentId,
+      crypto.randomUUID(), patientId, testDefId, documentId,
       t.date ?? extraction.report_date ?? documentDate,
       t.value ?? null, t.flag ?? "NORMAL",
       t.source_lab ?? extraction.lab_name ?? null,
@@ -198,7 +219,16 @@ export class DocumentExtractionWorkflow extends WorkflowEntrypoint<Bindings, Ext
       return null;
     });
 
-    // Step 4: Persist extracted data to D1 and mark document complete
+    // Step 4: Resolve test definitions — LLM disambiguation happens here.
+    // Isolated in its own step so Workflow memoizes results; retries of step 5
+    // reuse the cached map without firing any LLM calls.
+    const resolvedTestDefs = await step.do(
+      "resolve-test-definitions",
+      async (): Promise<Record<number, string>> =>
+        resolveTestDefinitions(this.env, this.env.DB, extraction.tests, userId),
+    );
+
+    // Step 5: Persist extracted data to D1 and mark document complete
     await step.do("persist-data", async () => {
       const now = new Date().toISOString();
       const finalType = extraction._classified_type ?? doc.type;
@@ -209,8 +239,8 @@ export class DocumentExtractionWorkflow extends WorkflowEntrypoint<Bindings, Ext
         this.env.DB.prepare("DELETE FROM medications WHERE document_id = ?").bind(documentId),
       ]);
 
-      // --- Blood tests ---
-      await persistExtractedTests(this.env, this.env.DB, extraction, patientId, documentId, userId);
+      // --- Blood tests (test_def IDs already resolved by step 4) ---
+      await persistExtractedTests(this.env.DB, extraction, patientId, documentId, userId, resolvedTestDefs);
 
       // --- Scan findings ---
       if (extraction.findings && extraction.findings.length > 0) {

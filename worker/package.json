@@ -10,7 +10,8 @@
   },
   "dependencies": {
     "@deepgram/sdk": "^3.0.0",
-    "hono": "^4.7.0"
+    "hono": "^4.7.0",
+    "zod": "^3.23.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.10.10",

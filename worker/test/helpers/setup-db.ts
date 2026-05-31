@@ -328,15 +328,215 @@ ALTER TABLE clinical_notes ADD COLUMN audio_duration_sec INTEGER;
 
 -- 0010_long_session_flag
 ALTER TABLE refresh_tokens ADD COLUMN long_session INTEGER NOT NULL DEFAULT 0;
+
+-- 0011_share_links
+CREATE TABLE share_links (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  patient_ids TEXT NOT NULL DEFAULT '[]',
+  scopes TEXT NOT NULL DEFAULT '["read"]',
+  expires_at TEXT NOT NULL,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  revoked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_share_links_token ON share_links(token_hash);
+CREATE INDEX idx_share_links_creator ON share_links(created_by);
+
+-- 0012_ai_provider_keys
+CREATE TABLE ai_provider_keys (
+  provider TEXT PRIMARY KEY,
+  ciphertext TEXT NOT NULL,
+  iv TEXT NOT NULL,
+  model TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by TEXT NOT NULL REFERENCES users(id)
+);
+
+-- 0013_ai_use_case_routing
+CREATE TABLE ai_use_case_routing (
+  use_case TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  model TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_by TEXT NOT NULL
+);
+INSERT INTO ai_use_case_routing VALUES ('doc_extract','google','gemini-2.5-flash',datetime('now'),'system');
+INSERT INTO ai_use_case_routing VALUES ('vitals_parse','google','gemini-2.5-flash',datetime('now'),'system');
+INSERT INTO ai_use_case_routing VALUES ('test_disambig','anthropic','claude-haiku-4-5-20251001',datetime('now'),'system');
+INSERT INTO ai_use_case_routing VALUES ('ref_range','anthropic','claude-haiku-4-5-20251001',datetime('now'),'system');
+INSERT INTO ai_use_case_routing VALUES ('voice_trans','deepgram','nova-3',datetime('now'),'system');
+
+-- 0014_share_links_nullable_expiry
+CREATE TABLE share_links_new (
+  id TEXT PRIMARY KEY,
+  token_hash TEXT NOT NULL UNIQUE,
+  patient_ids TEXT NOT NULL DEFAULT '[]',
+  scopes TEXT NOT NULL DEFAULT '["read"]',
+  expires_at TEXT,
+  created_by TEXT NOT NULL REFERENCES users(id),
+  revoked_at TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+INSERT INTO share_links_new SELECT * FROM share_links;
+DROP TABLE share_links;
+ALTER TABLE share_links_new RENAME TO share_links;
+CREATE INDEX idx_share_links_token ON share_links(token_hash);
+CREATE INDEX idx_share_links_creator ON share_links(created_by);
+
+-- 0015_share_links_store_link
+ALTER TABLE share_links ADD COLUMN link TEXT;
+
+-- 0016_personal_access_tokens
+CREATE TABLE personal_access_tokens (
+  id                          TEXT PRIMARY KEY,
+  user_id                     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name                        TEXT NOT NULL,
+  token_hash                  TEXT NOT NULL UNIQUE,
+  token_prefix                TEXT NOT NULL,
+  token_suffix                TEXT NOT NULL,
+  scopes                      TEXT NOT NULL DEFAULT 'read',
+  target_platform             TEXT,
+  pat_consent_acknowledged_at TEXT NOT NULL,
+  last_used_at                TEXT,
+  revoked_at                  TEXT,
+  created_at                  TEXT NOT NULL DEFAULT (datetime('now')),
+  expires_at                  TEXT,
+  UNIQUE(user_id, name)
+);
+CREATE INDEX idx_pat_user  ON personal_access_tokens(user_id);
+CREATE INDEX idx_pat_hash  ON personal_access_tokens(token_hash);
+
+-- 0017_external_api_access_log
+CREATE TABLE external_api_access_log (
+  id          TEXT PRIMARY KEY,
+  token_id    TEXT NOT NULL REFERENCES personal_access_tokens(id) ON DELETE CASCADE,
+  patient_id  TEXT,
+  tool        TEXT NOT NULL,
+  kind        TEXT NOT NULL,
+  status_code INTEGER NOT NULL,
+  error_code  TEXT,
+  ip          TEXT,
+  user_agent  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_access_log_token   ON external_api_access_log(token_id);
+CREATE INDEX idx_access_log_patient ON external_api_access_log(patient_id);
+CREATE INDEX idx_access_log_ts      ON external_api_access_log(created_at);
+
+-- 0018_write_confirmations
+CREATE TABLE write_confirmations (
+  id           TEXT PRIMARY KEY,
+  token_id     TEXT NOT NULL REFERENCES personal_access_tokens(id) ON DELETE CASCADE,
+  tool         TEXT NOT NULL,
+  payload_hash TEXT NOT NULL,
+  expires_at   TEXT NOT NULL,
+  created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_wc_token   ON write_confirmations(token_id);
+CREATE INDEX idx_wc_expires ON write_confirmations(expires_at);
+
+-- 0019_oauth
+CREATE TABLE oauth_clients (
+  id                         TEXT PRIMARY KEY,
+  client_name                TEXT NOT NULL,
+  redirect_uris              TEXT NOT NULL,
+  grant_types                TEXT NOT NULL DEFAULT 'authorization_code,refresh_token',
+  response_types             TEXT NOT NULL DEFAULT 'code',
+  token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none',
+  scope                      TEXT NOT NULL DEFAULT 'mcp.read',
+  software_id                TEXT,
+  software_version           TEXT,
+  created_at                 TEXT NOT NULL DEFAULT (datetime('now')),
+  last_used_at               TEXT
+);
+CREATE TABLE oauth_auth_codes (
+  code_hash             TEXT PRIMARY KEY,
+  client_id             TEXT NOT NULL REFERENCES oauth_clients(id) ON DELETE CASCADE,
+  user_id               TEXT NOT NULL REFERENCES users(id)         ON DELETE CASCADE,
+  redirect_uri          TEXT NOT NULL,
+  code_challenge        TEXT NOT NULL,
+  code_challenge_method TEXT NOT NULL DEFAULT 'S256' CHECK (code_challenge_method = 'S256'),
+  scope                 TEXT NOT NULL,
+  resource              TEXT NOT NULL,
+  expires_at            TEXT NOT NULL,
+  consumed_at           TEXT,
+  created_at            TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_oauth_auth_codes_expires ON oauth_auth_codes(expires_at);
+CREATE TABLE oauth_refresh_tokens (
+  id              TEXT PRIMARY KEY,
+  token_hash      TEXT NOT NULL UNIQUE,
+  access_token_id TEXT NOT NULL REFERENCES personal_access_tokens(id) ON DELETE CASCADE,
+  client_id       TEXT NOT NULL REFERENCES oauth_clients(id)          ON DELETE CASCADE,
+  user_id         TEXT NOT NULL REFERENCES users(id)                  ON DELETE CASCADE,
+  scope           TEXT NOT NULL,
+  resource        TEXT NOT NULL,
+  expires_at      TEXT NOT NULL,
+  rotated_to      TEXT,
+  revoked_at      TEXT,
+  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE INDEX idx_oauth_refresh_user    ON oauth_refresh_tokens(user_id);
+CREATE INDEX idx_oauth_refresh_client  ON oauth_refresh_tokens(client_id);
+CREATE INDEX idx_oauth_refresh_expires ON oauth_refresh_tokens(expires_at);
+ALTER TABLE personal_access_tokens ADD COLUMN client_id TEXT REFERENCES oauth_clients(id);
+ALTER TABLE personal_access_tokens ADD COLUMN issued_via TEXT NOT NULL DEFAULT 'pat'
+  CHECK (issued_via IN ('pat', 'oauth'));
+CREATE INDEX idx_pat_client_id ON personal_access_tokens(client_id);
 `;
 
+// Cleared in reverse-dependency order on subsequent calls; schema is created on first call.
+const CLEARABLE_TABLES = [
+  "oauth_refresh_tokens",
+  "write_confirmations",
+  "external_api_access_log",
+  "oauth_auth_codes",
+  "personal_access_tokens",
+  "disambiguation_log",
+  "medication_schedules",
+  "medications",
+  "culture_results",
+  "scan_findings",
+  "vital_readings",
+  "clinical_notes",
+  "test_results",
+  "test_definitions",
+  "documents",
+  "user_patient_access",
+  "share_links",
+  "ai_provider_keys",
+  "ai_use_case_routing",
+  "refresh_tokens",
+  "patient",
+  "oauth_clients",
+  "system_settings",
+  "purge_log",
+  "users",
+];
+
 export async function setupDb(db: D1Database) {
+  // Miniflare D1 silently swallows DDL errors (CREATE/DROP TABLE), so we can't
+  // rely on schema-detection queries. Instead, always attempt DELETE on every
+  // table (caught on first call when tables don't exist yet) then re-run
+  // migrations (caught on subsequent calls when tables already exist).
+  for (const t of CLEARABLE_TABLES) {
+    try {
+      await db.prepare(`DELETE FROM ${t}`).run();
+    } catch {
+      // first call: table doesn't exist yet
+    }
+  }
   const stmts = MIGRATIONS_SQL
     .split(";")
     .map((s) => s.replace(/--[^\n]*/g, "").trim())
     .filter((s) => s.length > 0);
   for (const stmt of stmts) {
-    await db.prepare(stmt).run();
+    try {
+      await db.prepare(stmt).run();
+    } catch {
+      // subsequent calls: DDL already applied (table/index already exists, etc.)
+    }
   }
 }
 
@@ -436,5 +636,51 @@ export async function seedMedication(db: D1Database, overrides?: Partial<{
   ).bind(id, patient_id, document_id, brand_name, dosage, form,
     start_date, is_active, prescription_ids, lifecycle_events).run();
 
+  return id;
+}
+
+export async function seedPat(db: D1Database, overrides?: Partial<{
+  id: string; user_id: string; name: string;
+  token_hash: string; token_prefix: string; token_suffix: string;
+  scopes: string; target_platform: string;
+  pat_consent_acknowledged_at: string;
+  revoked_at: string | null; expires_at: string | null;
+  issued_via: string; client_id: string | null;
+}>) {
+  const id = overrides?.id ?? "pat-1";
+  const user_id = overrides?.user_id ?? "admin-1";
+  const name = overrides?.name ?? "Test Token";
+  const token_hash = overrides?.token_hash ?? "fakehash123";
+  const token_prefix = overrides?.token_prefix ?? "mcp_aaaaaa";
+  const token_suffix = overrides?.token_suffix ?? "abc";
+  const scopes = overrides?.scopes ?? "read";
+  const target_platform = overrides?.target_platform ?? "anthropic";
+  const pat_consent_acknowledged_at = overrides?.pat_consent_acknowledged_at ?? new Date().toISOString();
+  const revoked_at = overrides?.revoked_at ?? null;
+  const expires_at = overrides?.expires_at ?? null;
+  const issued_via = overrides?.issued_via ?? "pat";
+  const client_id = overrides?.client_id ?? null;
+  await db.prepare(
+    `INSERT INTO personal_access_tokens
+      (id, user_id, name, token_hash, token_prefix, token_suffix, scopes, target_platform, pat_consent_acknowledged_at, revoked_at, expires_at, issued_via, client_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).bind(id, user_id, name, token_hash, token_prefix, token_suffix, scopes, target_platform, pat_consent_acknowledged_at, revoked_at, expires_at, issued_via, client_id).run();
+  return id;
+}
+
+export async function seedOAuthClient(db: D1Database, overrides?: Partial<{
+  id: string;
+  client_name: string;
+  redirect_uris: string;
+  scope: string;
+}>) {
+  const id = overrides?.id ?? "client-1";
+  const client_name = overrides?.client_name ?? "Test Client";
+  const redirect_uris = overrides?.redirect_uris ?? '["https://example.com/cb"]';
+  const scope = overrides?.scope ?? "mcp.read";
+  await db.prepare(
+    `INSERT INTO oauth_clients (id, client_name, redirect_uris, scope)
+     VALUES (?, ?, ?, ?)`
+  ).bind(id, client_name, redirect_uris, scope).run();
   return id;
 }

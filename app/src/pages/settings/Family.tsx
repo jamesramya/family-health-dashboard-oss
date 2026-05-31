@@ -6,7 +6,7 @@ import { usePatients, useCreatePatient, useUpdatePatient, usePurgePatientData } 
 import { Btn, Card } from "@/components/ui";
 import { Avatar } from "@/components/ui/Avatar";
 import { Spinner } from "@/components/ui/Spinner";
-import { formatDate } from "@/lib/format";
+import { formatMonthYear } from "@/lib/format";
 import type { Patient } from "@/types/api";
 
 interface PatientFormData {
@@ -15,6 +15,34 @@ interface PatientFormData {
   gender: string;
   blood_type: string;
   allergies: string;
+}
+
+// Derive a stable avatar tone from the patient's name.
+const AVATAR_TONES = ["#2f6b5f", "#b9854b", "#7a5a8f", "#c9942b", "#4a7a9b", "#8f5a5a"];
+function avatarTone(name: string): string {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  }
+  return AVATAR_TONES[h % AVATAR_TONES.length];
+}
+
+function initialsOf(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  const a = parts[0]?.[0] ?? "";
+  const b = parts.length > 1 ? parts[parts.length - 1][0] : "";
+  return (a + b).toUpperCase() || "?";
+}
+
+function ageFromDob(dob: string): number {
+  const today = new Date();
+  const birth = new Date(dob);
+  let age = today.getFullYear() - birth.getFullYear();
+  const hasBirthdayPassed =
+    today.getMonth() > birth.getMonth() ||
+    (today.getMonth() === birth.getMonth() && today.getDate() >= birth.getDate());
+  if (!hasBirthdayPassed) age -= 1;
+  return age;
 }
 
 function PersonFormPanel({
@@ -28,6 +56,7 @@ function PersonFormPanel({
 }) {
   const createPatient = useCreatePatient();
   const updatePatient = useUpdatePatient(existing?.id ?? "");
+  const purge = usePurgePatientData();
   const { register, handleSubmit, formState: { errors } } = useForm<PatientFormData>({
     defaultValues: existing
       ? {
@@ -118,21 +147,30 @@ function PersonFormPanel({
           />
         </div>
       </div>
-      <div className="flex gap-2">
-        <Btn type="submit" disabled={isPending}>
-          {isPending ? "Saving…" : existing ? "Update Person" : "Add Person"}
-        </Btn>
-        <Btn type="button" variant="secondary" onClick={onCancel}>Cancel</Btn>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <div className="flex gap-2">
+          <Btn type="submit" disabled={isPending}>
+            {isPending ? "Saving…" : existing ? "Update" : "Add Person"}
+          </Btn>
+          <Btn type="button" variant="secondary" onClick={onCancel}>Cancel</Btn>
+        </div>
+        {existing && (
+          <button
+            type="button"
+            onClick={() => {
+              if (confirm(`PERMANENTLY purge all data for "${existing.name}"? This cannot be undone.`)) {
+                purge.mutate(existing.id, { onSuccess });
+              }
+            }}
+            disabled={purge.isPending}
+            className="text-xs text-rose-500 hover:text-rose-600 disabled:opacity-50"
+          >
+            {purge.isPending ? "Purging…" : "Purge all data"}
+          </button>
+        )}
       </div>
     </form>
   );
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  const a = parts[0]?.[0] ?? "";
-  const b = parts.length > 1 ? parts[parts.length - 1][0] : "";
-  return (a + b).toUpperCase() || "?";
 }
 
 export function Family() {
@@ -141,7 +179,6 @@ export function Family() {
   const [isAddOpen, setIsAddOpen] = useState(params.get("action") === "add");
   const [editingId, setEditingId] = useState<string | null>(null);
   const { data, isLoading } = usePatients();
-  const purge = usePurgePatientData();
 
   useEffect(() => {
     if (params.get("action") === "add") {
@@ -159,21 +196,28 @@ export function Family() {
   const patients = data?.patients ?? [];
 
   return (
-    <Card className="space-y-4">
-      <div className="flex items-center justify-between">
+    <Card padded={false}>
+      <div className="p-6 border-b border-cream-200 flex justify-between items-center">
         <div>
-          <h3 className="text-2xl font-semibold text-ink">Family members</h3>
-          <p className="text-sm text-ink-muted">
+          <h3 className="font-sans font-semibold text-lg text-ink">Family members</h3>
+          <p className="text-sm text-ink-muted mt-0.5">
             {patients.length} {patients.length === 1 ? "person" : "people"} · you are admin
           </p>
         </div>
-        <Btn size="sm" onClick={() => setIsAddOpen((s) => !s)}>
+        <Btn
+          size="sm"
+          variant="primary"
+          onClick={() => {
+            setIsAddOpen((s) => !s);
+            setEditingId(null);
+          }}
+        >
           {isAddOpen ? "Cancel" : "Add person"}
         </Btn>
       </div>
 
       {isAddOpen && (
-        <div className="bg-teal-50 border border-teal-100 rounded-xl p-4">
+        <div className="p-6 border-b border-cream-200 bg-teal-50">
           <h4 className="text-sm font-medium text-teal-800 mb-3">New person</h4>
           <PersonFormPanel onSuccess={() => setIsAddOpen(false)} onCancel={() => setIsAddOpen(false)} />
         </div>
@@ -184,42 +228,32 @@ export function Family() {
           <Spinner size="md" />
         </div>
       ) : patients.length === 0 ? (
-        <p className="text-sm text-ink-muted">No family members added yet.</p>
+        <p className="text-sm text-ink-muted p-6">No family members added yet.</p>
       ) : (
-        <div className="space-y-2">
+        <ul className="divide-y divide-cream-200">
           {patients.map((patient) => (
-            <div key={patient.id} className="bg-cream-50 rounded-2xl border border-cream-200 p-4">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-3">
-                  <Avatar initials={initialsOf(patient.name)} tone="#2f6b5f" size={44} />
-                  <div>
-                    <p className="font-medium text-ink">{patient.name}</p>
-                    <p className="text-sm text-ink-muted">
-                      DOB: {formatDate(patient.date_of_birth)}
-                      {patient.blood_type && ` · ${patient.blood_type}`}
-                      {patient.gender && ` · ${patient.gender}`}
-                    </p>
-                  </div>
+            <li key={patient.id} className="px-6 py-4">
+              <div className="flex items-center gap-4">
+                <Avatar
+                  initials={initialsOf(patient.name)}
+                  tone={avatarTone(patient.name)}
+                  size={44}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-ink">{patient.name}</p>
+                  <p className="text-xs text-ink-muted">
+                    Age {ageFromDob(patient.date_of_birth)} · Added {formatMonthYear(patient.created_at)}
+                  </p>
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setEditingId(editingId === patient.id ? null : patient.id)}
-                    className="text-xs text-teal-600 hover:underline"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`PERMANENTLY purge all data for "${patient.name}"? This cannot be undone.`)) {
-                        purge.mutate(patient.id);
-                      }
-                    }}
-                    disabled={purge.isPending}
-                    className="text-xs text-rose-500 hover:text-rose-600"
-                  >
-                    Purge Data
-                  </button>
-                </div>
+                <button
+                  onClick={() => {
+                    setEditingId(editingId === patient.id ? null : patient.id);
+                    setIsAddOpen(false);
+                  }}
+                  className="text-sm text-teal-600 hover:underline flex-shrink-0"
+                >
+                  Edit
+                </button>
               </div>
 
               {editingId === patient.id && (
@@ -231,9 +265,9 @@ export function Family() {
                   />
                 </div>
               )}
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </Card>
   );

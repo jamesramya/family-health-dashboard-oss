@@ -3,9 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { About } from "./About";
 
 describe("About", () => {
-  it("renders the version text", () => {
+  it("renders version, sha, and build date in the standard shape", () => {
     render(<About />);
-    expect(screen.getByText(/v1\.4/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/^v\d+\.\d+\.\d+ · [0-9a-f]{7,} · built \d{1,2} [A-Z][a-z]{2} \d{4} · MIT licensed$/),
+    ).toBeInTheDocument();
   });
 
   it("renders the section heading", () => {

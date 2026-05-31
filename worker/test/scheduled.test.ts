@@ -120,3 +120,91 @@ describe("handleScheduled (purge cron)", () => {
     expect(row).not.toBeNull();
   });
 });
+
+describe("handleScheduled (OAuth sweep)", () => {
+  beforeEach(async () => {
+    await setupDb(env.DB);
+    await seedAdmin(env.DB);
+    await seedPatient(env.DB);
+  });
+
+  it("deletes expired oauth_auth_codes", async () => {
+    await env.DB.prepare(
+      "INSERT INTO oauth_clients (id, client_name, redirect_uris, scope) VALUES (?, ?, ?, ?)"
+    ).bind("client-sweep", "Sweep Client", '["https://example.com/cb"]', "mcp.read").run();
+    await env.DB.prepare(
+      `INSERT INTO oauth_auth_codes
+        (code_hash, client_id, user_id, redirect_uri, code_challenge, scope, resource, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '-1 hour'))`
+    ).bind("expired-code", "client-sweep", "admin-1", "https://example.com/cb", "challenge", "mcp.read", "https://example.com").run();
+
+    await handleScheduled(makeEvent(), TEST_ENV as any, makeCtx());
+
+    const row = await env.DB.prepare("SELECT code_hash FROM oauth_auth_codes WHERE code_hash = ?")
+      .bind("expired-code").first();
+    expect(row).toBeNull();
+  });
+
+  it("does NOT delete non-expired oauth_auth_codes", async () => {
+    await env.DB.prepare(
+      "INSERT INTO oauth_clients (id, client_name, redirect_uris, scope) VALUES (?, ?, ?, ?)"
+    ).bind("client-sweep2", "Sweep Client 2", '["https://example.com/cb"]', "mcp.read").run();
+    await env.DB.prepare(
+      `INSERT INTO oauth_auth_codes
+        (code_hash, client_id, user_id, redirect_uri, code_challenge, scope, resource, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '+10 minutes'))`
+    ).bind("fresh-code", "client-sweep2", "admin-1", "https://example.com/cb", "challenge", "mcp.read", "https://example.com").run();
+
+    await handleScheduled(makeEvent(), TEST_ENV as any, makeCtx());
+
+    const row = await env.DB.prepare("SELECT code_hash FROM oauth_auth_codes WHERE code_hash = ?")
+      .bind("fresh-code").first();
+    expect(row).not.toBeNull();
+  });
+
+  it("deletes oauth_refresh_tokens expired more than 7 days ago", async () => {
+    await env.DB.prepare(
+      "INSERT INTO oauth_clients (id, client_name, redirect_uris, scope) VALUES (?, ?, ?, ?)"
+    ).bind("client-rt-sweep", "RT Sweep Client", '["https://example.com/cb"]', "mcp.read").run();
+    await env.DB.prepare(
+      `INSERT INTO personal_access_tokens
+        (id, user_id, name, token_hash, token_prefix, token_suffix, scopes, target_platform, pat_consent_acknowledged_at, issued_via, client_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind("pat-rt-sweep", "admin-1", "RT Sweep PAT", "hash-rt-sweep", "fhd_abc", "xyz", "mcp.read", "anthropic", new Date().toISOString(), "oauth", "client-rt-sweep").run();
+
+    await env.DB.prepare(
+      `INSERT INTO oauth_refresh_tokens
+        (id, token_hash, access_token_id, client_id, user_id, scope, resource, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '-8 days'))`
+    ).bind("rt-old", "rthash-old", "pat-rt-sweep", "client-rt-sweep", "admin-1", "mcp.read", "https://example.com").run();
+
+    await handleScheduled(makeEvent(), TEST_ENV as any, makeCtx());
+
+    const row = await env.DB.prepare("SELECT id FROM oauth_refresh_tokens WHERE id = ?")
+      .bind("rt-old").first();
+    expect(row).toBeNull();
+  });
+
+  it("does NOT delete oauth_refresh_tokens expired less than 7 days ago", async () => {
+    await env.DB.prepare(
+      "INSERT INTO oauth_clients (id, client_name, redirect_uris, scope) VALUES (?, ?, ?, ?)"
+    ).bind("client-rt-keep", "RT Keep Client", '["https://example.com/cb"]', "mcp.read").run();
+    await env.DB.prepare(
+      `INSERT INTO personal_access_tokens
+        (id, user_id, name, token_hash, token_prefix, token_suffix, scopes, target_platform, pat_consent_acknowledged_at, issued_via, client_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).bind("pat-rt-keep", "admin-1", "RT Keep PAT", "hash-rt-keep", "fhd_def", "uvw", "mcp.read", "anthropic", new Date().toISOString(), "oauth", "client-rt-keep").run();
+
+    await env.DB.prepare(
+      `INSERT INTO oauth_refresh_tokens
+        (id, token_hash, access_token_id, client_id, user_id, scope, resource, expires_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now', '-3 days'))`
+    ).bind("rt-recent", "rthash-recent", "pat-rt-keep", "client-rt-keep", "admin-1", "mcp.read", "https://example.com").run();
+
+    await handleScheduled(makeEvent(), TEST_ENV as any, makeCtx());
+
+    const row = await env.DB.prepare("SELECT id FROM oauth_refresh_tokens WHERE id = ?")
+      .bind("rt-recent").first();
+    expect(row).not.toBeNull();
+  });
+});

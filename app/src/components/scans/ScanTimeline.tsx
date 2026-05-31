@@ -1,14 +1,14 @@
 import { formatDate } from "@/lib/format";
-import type { ScanFinding } from "@/types/api";
+import type { ScanSummary } from "./types";
 
 interface Props {
-  scans: ScanFinding[];
+  scans: ScanSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
 }
 
 export function ScanTimeline({ scans, selectedId, onSelect }: Props) {
-  const byYear = new Map<string, ScanFinding[]>();
+  const byYear = new Map<string, ScanSummary[]>();
   for (const s of scans) {
     const y = s.scan_date ? new Date(s.scan_date).getFullYear().toString() : "Unknown";
     (byYear.get(y) ?? byYear.set(y, []).get(y)!).push(s);

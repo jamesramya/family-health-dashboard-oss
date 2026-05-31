@@ -396,6 +396,7 @@ async function callGemini(
         headers: {
           "x-goog-api-key": apiKey,
           "Content-Type": "application/json",
+          "cf-aig-cache-ttl": "300",
         },
         body,
       },
@@ -460,6 +461,7 @@ async function callGpt(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "cf-aig-cache-ttl": "300",
       },
       body: JSON.stringify({
         model: "gpt-4.1-mini",

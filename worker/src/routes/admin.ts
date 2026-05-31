@@ -11,22 +11,8 @@ type Variables = {
 
 export const adminRoutes = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
-// Helper: Check if the requesting user is super admin
-async function checkSuperAdmin(c: any): Promise<boolean> {
-  const user = c.get("user") as { sub: string; role: string; email: string } | undefined;
-  if (!user) return false;
-  const row = await c.env.DB.prepare(
-    "SELECT is_super_admin FROM users WHERE id = ?"
-  ).bind(user.sub).first() as { is_super_admin: number } | null;
-  return row?.is_super_admin === 1;
-}
-
 // GET /api/admin/users — list all users
 adminRoutes.get("/users", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const result = await c.env.DB.prepare(
     "SELECT id, email, role, display_name, is_super_admin, must_change_pw, created_at, updated_at FROM users ORDER BY created_at DESC"
   ).all();
@@ -36,10 +22,7 @@ adminRoutes.get("/users", async (c) => {
 
 // POST /api/admin/users — create user
 adminRoutes.post("/users", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
+  const adminId = c.get("user").sub;
   const body = await c.req.json<{
     email: string;
     display_name: string;
@@ -69,10 +52,23 @@ adminRoutes.post("/users", async (c) => {
   const tempPassword = body.password ?? generateTempPassword();
   const passwordHash = await hashPassword(tempPassword);
 
-  await c.env.DB.prepare(
+  const patients = await c.env.DB.prepare(
+    "SELECT id FROM patient WHERE is_deleted = 0"
+  ).all<{ id: string }>();
+
+  const insertUser = c.env.DB.prepare(
     `INSERT INTO users (id, email, password_hash, role, display_name, must_change_pw)
      VALUES (?, ?, ?, ?, ?, 1)`
-  ).bind(id, body.email, passwordHash, body.role, body.display_name).run();
+  ).bind(id, body.email, passwordHash, body.role, body.display_name);
+
+  const accessInserts = patients.results.map((p) =>
+    c.env.DB.prepare(
+      `INSERT INTO user_patient_access (id, user_id, patient_id, role, granted_by)
+       VALUES (?, ?, ?, ?, ?)`
+    ).bind(crypto.randomUUID(), id, p.id, body.role, adminId)
+  );
+
+  await c.env.DB.batch([insertUser, ...accessInserts]);
 
   return c.json({
     user: { id, email: body.email, role: body.role, display_name: body.display_name, must_change_pw: 1 },
@@ -82,10 +78,6 @@ adminRoutes.post("/users", async (c) => {
 
 // PUT /api/admin/users/:id — update role
 adminRoutes.put("/users/:id", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const id = c.req.param("id");
 
   const existing = await c.env.DB.prepare(
@@ -136,10 +128,6 @@ adminRoutes.put("/users/:id", async (c) => {
 
 // DELETE /api/admin/users/:id — remove user (cascades via FK)
 adminRoutes.delete("/users/:id", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const id = c.req.param("id");
 
   const existing = await c.env.DB.prepare(
@@ -160,10 +148,6 @@ adminRoutes.delete("/users/:id", async (c) => {
 
 // POST /api/admin/users/:id/reset-pw — set temp password, set must_change_pw=1
 adminRoutes.post("/users/:id/reset-pw", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const id = c.req.param("id");
 
   const existing = await c.env.DB.prepare(
@@ -224,10 +208,6 @@ adminRoutes.get("/export", async (c) => {
 // Computes SHA-256 from R2 for all documents where sha256 IS NULL.
 // Super-admin only. Safe to call multiple times (already-hashed docs excluded by the query).
 adminRoutes.post("/documents/backfill-sha256", async (c) => {
-  if (!(await checkSuperAdmin(c))) {
-    return c.json({ error: "Forbidden: super admin required" }, 403);
-  }
-
   const docs = await c.env.DB.prepare(
     "SELECT id, r2_key FROM documents WHERE sha256 IS NULL AND is_deleted = 0"
   ).all<{ id: string; r2_key: string }>();

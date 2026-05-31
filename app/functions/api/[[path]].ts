@@ -23,7 +23,7 @@ export const onRequest: PagesFunction<Env> = async ({ request, env, params }) =>
 
   // Cloudflare's Headers object deduplicates Set-Cookie when proxying; rebuild
   // the response so both access_token and refresh_token cookies reach the browser.
-  const cookies = (workerRes.headers as unknown as { getAll(name: string): string[] }).getAll("Set-Cookie");
+  const cookies = workerRes.headers.getSetCookie();
   const res = new Response(workerRes.body, {
     status: workerRes.status,
     statusText: workerRes.statusText,

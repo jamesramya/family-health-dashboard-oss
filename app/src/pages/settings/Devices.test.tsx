@@ -34,4 +34,28 @@ describe("Devices", () => {
     expect(h2!.className).not.toContain("font-display");
     expect(h2!.className).toContain("font-semibold");
   });
+
+  it("renders all four device rows", () => {
+    mockRole = "admin";
+    render(<Devices />);
+    expect(screen.getByText("Omron BP monitor")).toBeInTheDocument();
+    expect(screen.getByText("Apple Health")).toBeInTheDocument();
+    expect(screen.getByText("Dexcom G7")).toBeInTheDocument();
+    expect(screen.getByText("Fitbit")).toBeInTheDocument();
+  });
+
+  it("shows a coming-soon badge on each device row", () => {
+    mockRole = "admin";
+    render(<Devices />);
+    const badges = screen.getAllByText(/coming soon/i);
+    expect(badges.length).toBe(4);
+  });
+
+  it("renders a list element for device rows", () => {
+    mockRole = "admin";
+    const { container } = render(<Devices />);
+    const ul = container.querySelector("ul");
+    expect(ul).not.toBeNull();
+    expect(ul!.querySelectorAll("li").length).toBe(4);
+  });
 });

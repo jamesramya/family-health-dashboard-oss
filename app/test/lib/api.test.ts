@@ -20,7 +20,7 @@ function mockFetch(responses: Array<{ status: number; body?: unknown }>) {
 beforeEach(() => {
   // Allow overwriting window.location
   Object.defineProperty(window, "location", {
-    value: { href: "/" },
+    value: { href: "/", pathname: "/", search: "" },
     writable: true,
     configurable: true,
   });
@@ -143,7 +143,7 @@ describe("401 handling", () => {
     expect(secondCall[1]).toMatchObject({ method: "POST", credentials: "include" });
   });
 
-  it("on second 401 after refresh: redirects to /login", async () => {
+  it("on second 401 after refresh: redirects to /login with returnTo", async () => {
     // First call: original → 401
     // Second call: refresh → 200
     // Third call: retry original → 401 again
@@ -156,10 +156,10 @@ describe("401 handling", () => {
 
     await api.get("/protected");
 
-    expect(window.location.href).toBe("/login");
+    expect(window.location.href).toMatch(/^\/login\?returnTo=/);
   });
 
-  it("on refresh 401: redirects to /login without retrying", async () => {
+  it("on refresh 401: redirects to /login with returnTo without retrying", async () => {
     // First call: original → 401
     // Second call: refresh → 401
     const fetchMock = mockFetch([{ status: 401 }, { status: 401 }]);
@@ -167,7 +167,7 @@ describe("401 handling", () => {
 
     await api.get("/protected");
 
-    expect(window.location.href).toBe("/login");
+    expect(window.location.href).toMatch(/^\/login\?returnTo=/);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

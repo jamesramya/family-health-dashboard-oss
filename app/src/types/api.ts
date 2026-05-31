@@ -22,6 +22,7 @@ export interface Patient {
   blood_type: string | null;
   allergies: string[] | null;
   photo_r2_key: string | null;
+  created_at: string; // ISO datetime
 }
 
 export type DocumentType =

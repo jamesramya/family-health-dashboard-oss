@@ -1,7 +1,7 @@
 import { NavLink } from "react-router-dom";
 import {
   Home, FlaskConical, Heart, Pill, NotebookPen, Microscope, FolderOpen,
-  Settings as SettingsIcon, Shield, LogOut, type LucideIcon,
+  Settings as SettingsIcon, LogOut, type LucideIcon,
 } from "lucide-react";
 import type { UserRole } from "@/types/api";
 
@@ -74,12 +74,6 @@ export function Sidebar({
             {label}
           </NavLink>
         ))}
-        {user.isAdmin && (
-          <NavLink to="/admin" className={itemClass}>
-            <Shield size={18} aria-hidden />
-            Admin
-          </NavLink>
-        )}
       </nav>
       <div className="p-4 border-t border-cream-200">
         <div className="flex items-center gap-3 px-2">

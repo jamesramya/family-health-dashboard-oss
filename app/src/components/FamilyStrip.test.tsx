@@ -7,9 +7,9 @@ import type { Patient } from "@/types/api";
 
 const PATIENTS: Patient[] = [
   { id: "p1", name: "Demo", date_of_birth: "1950-03-04", gender: "f",
-    blood_type: "O+", allergies: null, photo_r2_key: null },
+    blood_type: "O+", allergies: null, photo_r2_key: null, created_at: "2024-02-01T00:00:00.000Z" },
   { id: "p2", name: "Ravi",       date_of_birth: "1978-11-12", gender: "m",
-    blood_type: null, allergies: null, photo_r2_key: null },
+    blood_type: null, allergies: null, photo_r2_key: null, created_at: "2024-02-01T00:00:00.000Z" },
 ];
 
 function renderWithPrefs(ui: React.ReactElement) {

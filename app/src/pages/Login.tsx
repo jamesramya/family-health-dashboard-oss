@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "@/lib/api";
+import { getSafeReturnTo } from "@/lib/safe-return-to";
 import { useTurnstile } from "@/hooks/use-turnstile";
 import { AuthShell } from "@/components/auth/AuthShell";
 import { Btn } from "@/components/ui";
@@ -13,6 +14,7 @@ const SITE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY ?? "";
 
 export function Login() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { ref: turnstileRef, token: turnstileToken, reset } = useTurnstile(SITE_KEY);
   const [err, setErr] = useState<string | null>(null);
 
@@ -27,8 +29,9 @@ export function Login() {
       const data = await api.post<LoginResponse>("/auth/login", {
         email: v.email, password: v.password, turnstileToken, remember: v.remember,
       });
+      const returnTo = getSafeReturnTo(searchParams);
       if (data.must_change_pw) window.location.href = "/change-password";
-      else navigate("/");
+      else navigate(returnTo ?? "/");
     } catch (e) {
       reset();
       setErr(e instanceof ApiError ? e.message : "Sign in failed.");

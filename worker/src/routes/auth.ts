@@ -198,3 +198,38 @@ authRoutes.get("/me", authMiddleware, async (c) => {
   if (!user) return c.json({ error: "User not found" }, 404);
   return c.json({ user });
 });
+
+authRoutes.put("/me", authMiddleware, async (c) => {
+  const jwt = c.get("user");
+  const { display_name, email } = await c.req.json<{ display_name?: string; email?: string }>();
+
+  if (email !== undefined && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return c.json({ error: "Invalid email format" }, 400);
+  }
+
+  if (email !== undefined) {
+    const conflict = await c.env.DB.prepare(
+      "SELECT id FROM users WHERE email = ? AND id != ?"
+    ).bind(email, jwt.sub).first<{ id: string }>();
+    if (conflict) return c.json({ error: "Email already taken" }, 409);
+  }
+
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (display_name !== undefined) { fields.push("display_name = ?"); values.push(display_name); }
+  if (email !== undefined) { fields.push("email = ?"); values.push(email); }
+
+  if (fields.length > 0) {
+    fields.push("updated_at = datetime('now')");
+    values.push(jwt.sub);
+    await c.env.DB.prepare(
+      `UPDATE users SET ${fields.join(", ")} WHERE id = ?`
+    ).bind(...values).run();
+  }
+
+  const user = await c.env.DB.prepare(
+    "SELECT id, email, role, display_name FROM users WHERE id = ?"
+  ).bind(jwt.sub).first<{ id: string; email: string; role: string; display_name: string }>();
+  if (!user) return c.json({ error: "User not found" }, 404);
+  return c.json({ user });
+});

@@ -40,7 +40,8 @@ async function request<T>(
   if (response.status === 401) {
     if (isRetry) {
       // Already tried refreshing — give up and redirect
-      window.location.href = "/login";
+      const here = window.location.pathname + window.location.search;
+      window.location.href = "/login?returnTo=" + encodeURIComponent(here);
       return undefined as unknown as T;
     }
 
@@ -52,7 +53,8 @@ async function request<T>(
     });
 
     if (refreshResponse.status === 401) {
-      window.location.href = "/login";
+      const here = window.location.pathname + window.location.search;
+      window.location.href = "/login?returnTo=" + encodeURIComponent(here);
       return undefined as unknown as T;
     }
 
@@ -83,7 +85,8 @@ async function requestBlob(path: string, isRetry = false): Promise<Blob> {
 
   if (response.status === 401) {
     if (isRetry) {
-      window.location.href = "/login";
+      const here = window.location.pathname + window.location.search;
+      window.location.href = "/login?returnTo=" + encodeURIComponent(here);
       return new Blob();
     }
     const refreshResponse = await fetch("/api/auth/refresh", {
@@ -92,7 +95,8 @@ async function requestBlob(path: string, isRetry = false): Promise<Blob> {
       headers: {},
     });
     if (refreshResponse.status === 401) {
-      window.location.href = "/login";
+      const here = window.location.pathname + window.location.search;
+      window.location.href = "/login?returnTo=" + encodeURIComponent(here);
       return new Blob();
     }
     return requestBlob(path, true);

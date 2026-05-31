@@ -26,6 +26,12 @@ migrations_dir = "src/db/migrations"
 binding = "BUCKET"
 bucket_name = "family-health-dashboard-files"
 
+[[unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1001"
+simple = { limit = 100, period = 60 }
+
 [[workflows]]
 binding = "EXTRACTION_WORKFLOW"
 name = "document-extraction"
@@ -46,6 +52,7 @@ name = "family-health-dashboard-api-staging"
 [env.staging.vars]
 ENVIRONMENT = "staging"
 AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/<YOUR_CLOUDFLARE_ACCOUNT_ID>/family-health-dashboard"
+CORS_ORIGIN = "https://family-health-dashboard-staging.pages.dev"
 
 [[env.staging.d1_databases]]
 binding = "DB"
@@ -56,6 +63,12 @@ migrations_dir = "src/db/migrations"
 [[env.staging.r2_buckets]]
 binding = "BUCKET"
 bucket_name = "family-health-dashboard-files-staging"
+
+[[env.staging.unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1002"
+simple = { limit = 100, period = 60 }
 
 [[env.staging.workflows]]
 binding = "EXTRACTION_WORKFLOW"
@@ -77,6 +90,7 @@ name = "family-health-dashboard-api"
 [env.production.vars]
 ENVIRONMENT = "production"
 AI_GATEWAY_URL = "https://gateway.ai.cloudflare.com/v1/<YOUR_CLOUDFLARE_ACCOUNT_ID>/family-health-dashboard"
+CORS_ORIGIN = "https://family-health-dashboard.pages.dev"
 
 [[env.production.d1_databases]]
 binding = "DB"
@@ -87,6 +101,12 @@ migrations_dir = "src/db/migrations"
 [[env.production.r2_buckets]]
 binding = "BUCKET"
 bucket_name = "family-health-dashboard-files"
+
+[[env.production.unsafe.bindings]]
+name = "RATE_LIMITER"
+type = "ratelimit"
+namespace_id = "1003"
+simple = { limit = 100, period = 60 }
 
 [[env.production.workflows]]
 binding = "EXTRACTION_WORKFLOW"

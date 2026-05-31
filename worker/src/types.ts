@@ -15,4 +15,5 @@ export type Bindings = {
   // Backup (optional — backup skipped if not set)
   GITHUB_TOKEN?: string;
   GITHUB_REPO?: string;  // e.g. "owner/repo"
+  RATE_LIMITER: { limit(opts: { key: string }): Promise<{ success: boolean }> };
 };

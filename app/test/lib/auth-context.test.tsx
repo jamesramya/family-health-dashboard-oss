@@ -25,7 +25,7 @@ const mockApi = api as { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof 
 beforeEach(() => {
   vi.clearAllMocks();
   Object.defineProperty(window, "location", {
-    value: { href: "/" },
+    value: { href: "/", pathname: "/", search: "" },
     writable: true,
     configurable: true,
   });

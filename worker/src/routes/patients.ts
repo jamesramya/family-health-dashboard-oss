@@ -135,6 +135,190 @@ patientRoutes.post("/:pid/access", async (c) => {
   return c.json({ ok: true }, 201);
 });
 
+// PUT /api/patients/:pid — update patient fields (super admin or patient-admin)
+patientRoutes.put("/:pid", async (c) => {
+  const user = c.get("user");
+  const pid = c.req.param("pid");
+
+  const superAdminRow = await c.env.DB.prepare(
+    "SELECT is_super_admin FROM users WHERE id = ?"
+  ).bind(user.sub).first<{ is_super_admin: number }>();
+
+  if (!superAdminRow?.is_super_admin) {
+    const accessRow = await c.env.DB.prepare(
+      "SELECT role FROM user_patient_access WHERE user_id = ? AND patient_id = ?"
+    ).bind(user.sub, pid).first<{ role: string }>();
+
+    if (!accessRow || accessRow.role !== "admin") {
+      return c.json({ error: "Forbidden: must be super admin or patient admin" }, 403);
+    }
+  }
+
+  const existing = await c.env.DB.prepare(
+    "SELECT id FROM patient WHERE id = ? AND is_deleted = 0"
+  ).bind(pid).first();
+
+  if (!existing) {
+    return c.json({ error: "Patient not found" }, 404);
+  }
+
+  const body = await c.req.json<{
+    name?: string;
+    date_of_birth?: string;
+    gender?: string;
+    blood_type?: string;
+    allergies?: string[];
+  }>();
+
+  if (body.date_of_birth !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(body.date_of_birth)) {
+    return c.json({ error: "date_of_birth must be YYYY-MM-DD" }, 400);
+  }
+
+  const validGenders = ["male", "female", "other"];
+  if (body.gender !== undefined && !validGenders.includes(body.gender)) {
+    return c.json({ error: "gender must be one of: male, female, other" }, 400);
+  }
+
+  const updates: string[] = [];
+  const bindings: unknown[] = [];
+
+  if (body.name !== undefined) { updates.push("name = ?"); bindings.push(body.name); }
+  if (body.date_of_birth !== undefined) { updates.push("date_of_birth = ?"); bindings.push(body.date_of_birth); }
+  if (body.gender !== undefined) { updates.push("gender = ?"); bindings.push(body.gender); }
+  if (body.blood_type !== undefined) { updates.push("blood_type = ?"); bindings.push(body.blood_type); }
+  if (body.allergies !== undefined) { updates.push("allergies = ?"); bindings.push(JSON.stringify(body.allergies)); }
+
+  if (updates.length > 0) {
+    updates.push("updated_by = ?", "updated_at = datetime('now')");
+    bindings.push(user.sub, pid);
+    await c.env.DB.prepare(
+      `UPDATE patient SET ${updates.join(", ")} WHERE id = ?`
+    ).bind(...bindings).run();
+  }
+
+  const patient = await c.env.DB.prepare(
+    "SELECT id, name, date_of_birth, gender, blood_type, allergies, photo_r2_key, created_at, updated_at FROM patient WHERE id = ?"
+  ).bind(pid).first();
+
+  return c.json({ patient });
+});
+
+// DELETE /api/patients/:pid/purge — cascade delete all patient data (super admin or patient-admin)
+patientRoutes.delete("/:pid/purge", async (c) => {
+  const user = c.get("user");
+  const pid = c.req.param("pid");
+
+  const superAdminRow = await c.env.DB.prepare(
+    "SELECT is_super_admin FROM users WHERE id = ?"
+  ).bind(user.sub).first<{ is_super_admin: number }>();
+
+  if (!superAdminRow?.is_super_admin) {
+    const accessRow = await c.env.DB.prepare(
+      "SELECT role FROM user_patient_access WHERE user_id = ? AND patient_id = ?"
+    ).bind(user.sub, pid).first<{ role: string }>();
+
+    if (!accessRow || accessRow.role !== "admin") {
+      return c.json({ error: "Forbidden: must be super admin or patient admin" }, 403);
+    }
+  }
+
+  const patientRow = await c.env.DB.prepare(
+    "SELECT id FROM patient WHERE id = ?"
+  ).bind(pid).first();
+
+  if (!patientRow) {
+    return c.json({ error: "Patient not found" }, 404);
+  }
+
+  // Delete R2 objects for this patient before deleting documents
+  const prefix = `patients/${pid}/`;
+  let r2ObjectsDeleted = 0;
+  let cursor: string | undefined;
+  do {
+    const listed: R2Objects = await c.env.BUCKET.list({ prefix, cursor });
+    for (const obj of listed.objects) {
+      await c.env.BUCKET.delete(obj.key);
+      r2ObjectsDeleted++;
+    }
+    cursor = listed.truncated ? listed.cursor : undefined;
+  } while (cursor);
+
+  // Cascade deletes — explicit (FK cascade not guaranteed without PRAGMA foreign_keys = ON)
+  let totalRows = 0;
+
+  const testResults = await c.env.DB.prepare(
+    "DELETE FROM test_results WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += testResults.meta.changes ?? 0;
+
+  const vitalReadings = await c.env.DB.prepare(
+    "DELETE FROM vital_readings WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += vitalReadings.meta.changes ?? 0;
+
+  // medication_schedules cascade via FK on medications(id), but delete explicitly
+  const medIds = await c.env.DB.prepare(
+    "SELECT id FROM medications WHERE patient_id = ?"
+  ).bind(pid).all<{ id: string }>();
+  for (const med of medIds.results) {
+    const sched = await c.env.DB.prepare(
+      "DELETE FROM medication_schedules WHERE medication_id = ?"
+    ).bind(med.id).run();
+    totalRows += sched.meta.changes ?? 0;
+  }
+
+  const medications = await c.env.DB.prepare(
+    "DELETE FROM medications WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += medications.meta.changes ?? 0;
+
+  const scanFindings = await c.env.DB.prepare(
+    "DELETE FROM scan_findings WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += scanFindings.meta.changes ?? 0;
+
+  const cultureResults = await c.env.DB.prepare(
+    "DELETE FROM culture_results WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += cultureResults.meta.changes ?? 0;
+
+  const clinicalNotes = await c.env.DB.prepare(
+    "DELETE FROM clinical_notes WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += clinicalNotes.meta.changes ?? 0;
+
+  const documents = await c.env.DB.prepare(
+    "DELETE FROM documents WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += documents.meta.changes ?? 0;
+
+  const accessRows = await c.env.DB.prepare(
+    "DELETE FROM user_patient_access WHERE patient_id = ?"
+  ).bind(pid).run();
+  totalRows += accessRows.meta.changes ?? 0;
+
+  const patientDelete = await c.env.DB.prepare(
+    "DELETE FROM patient WHERE id = ?"
+  ).bind(pid).run();
+  totalRows += patientDelete.meta.changes ?? 0;
+
+  // Log the purge
+  await c.env.DB.prepare(
+    "INSERT INTO purge_log (id, tables_affected, total_rows, r2_objects_deleted) VALUES (?, ?, ?, ?)"
+  ).bind(
+    crypto.randomUUID(),
+    JSON.stringify([
+      "test_results", "vital_readings", "medication_schedules", "medications",
+      "scan_findings", "culture_results", "clinical_notes", "documents",
+      "user_patient_access", "patient",
+    ]),
+    totalRows,
+    r2ObjectsDeleted,
+  ).run();
+
+  return c.json({ purged: true });
+});
+
 // DELETE /api/patients/:pid/access/:uid — revoke access
 patientRoutes.delete("/:pid/access/:uid", async (c) => {
   const user = c.get("user");
